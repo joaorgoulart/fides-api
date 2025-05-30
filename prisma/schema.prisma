@@ -1,0 +1,169 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+    provider = "prisma-client-js"
+    output   = "../generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// User model - Usuários do sistema
+model User {
+    id          String      @id @default(cuid())
+    login       String      @unique
+    email       String      @unique
+    name        String
+    accessLevel AccessLevel @default(CLIENT)
+    password    String // Hash da senha
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamentos
+    createdMoMs MeetingMinute[] @relation("CreatedByUser")
+    updatedMoMs MeetingMinute[] @relation("UpdatedByUser")
+    comments    Comment[]       @relation("CommentAuthor")
+
+    @@map("users")
+}
+
+// MoM model - Minutes of Meeting (Atas)
+model MeetingMinute {
+    id             String               @id @default(cuid())
+    cnpj           String
+    submissionDate DateTime             @default(now())
+    status         MeetingMinutesStatus @default(PENDING)
+    summary        String
+    pdfUrl         String?
+    photoUrl       String?
+    signatureUrl   String?
+    blockchainHash String?              @unique
+    blockchainTxId String?              @unique
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamentos
+    createdById String?
+    createdBy   User?   @relation("CreatedByUser", fields: [createdById], references: [id])
+    updatedById String?
+    updatedBy   User?   @relation("UpdatedByUser", fields: [updatedById], references: [id])
+
+    llmData          LLMData?
+    validationReport ValidationReport?
+    comments         Comment[]
+
+    // Índices para performance
+    @@index([cnpj])
+    @@index([status])
+    @@index([submissionDate])
+    @@index([blockchainHash])
+    @@map("moms")
+}
+
+// LLM Data - Dados extraídos pelo LLM
+model LLMData {
+    id            String   @id @default(cuid())
+    summary       String
+    agenda        String
+    subjects      String[] // Array de strings
+    deliberations String[] // Array de strings
+    signatures    String[] // Array de strings
+    keywords      String[] // Array de strings
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamento com MoM (1:1)
+    momId String        @unique
+    mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
+
+    // Relacionamento com participantes
+    participants Participant[]
+
+    @@map("llm_data")
+}
+
+// Participantes da ata
+model Participant {
+    id   String @id @default(cuid())
+    name String
+    rg   String
+    cpf  String
+    role String
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamento com LLMData
+    llmDataId String
+    llmData   LLMData @relation(fields: [llmDataId], references: [id], onDelete: Cascade)
+
+    // Índices
+    @@index([cpf])
+    @@index([rg])
+    @@map("participants")
+}
+
+// Relatório de validação
+model ValidationReport {
+    id                String   @id @default(cuid())
+    signaturesValid   Boolean  @default(false)
+    participantsValid Boolean  @default(false)
+    inconsistencies   String[] // Array de inconsistências encontradas
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamento com MoM (1:1)
+    momId String        @unique
+    mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
+
+    @@map("validation_reports")
+}
+
+// Comentários sobre as MoMs
+model Comment {
+    id      String @id @default(cuid())
+    content String
+
+    // Timestamps
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    // Relacionamento com MoM
+    momId String
+    mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
+
+    // Relacionamento com usuário que criou o comentário
+    authorId String?
+    author   User?   @relation("CommentAuthor", fields: [authorId], references: [id])
+
+    @@map("comments")
+}
+
+// Enums
+enum AccessLevel {
+    CLIENT
+    NOTARY
+    ADMIN
+}
+
+enum MeetingMinutesStatus {
+    PENDING
+    UNDER_REVIEW
+    AUTHENTICATED
+    REJECTED
+}
