@@ -12,6 +12,7 @@ router.post("/login", AuthController.login);
 router.get("/meeting-minutes", MeetingMinuteController.getMeetingMinutes);
 router.get("/meeting-minutes/:id", MeetingMinuteController.getMeetingMinuteById);
 router.put("/meeting-minutes/:id", MeetingMinuteController.updateMeetingMinute);
+router.post("/meeting-minutes/:id/authenticate", MeetingMinuteController.authenticateMeetingMinute);
 
 // User
 router.get("/user", UserController.getCurrentUser);

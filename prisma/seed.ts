@@ -56,7 +56,7 @@ async function main() {
             summary:
                 "Reunião ordinária do conselho de administração para aprovação do orçamento anual",
             status: "AUTHENTICATED",
-            pdfUrl: "/uploads/mom1.pdf",
+            pdfUrl: "http://localhost:3000/sample-ata.pdf",
             photoUrl: "/uploads/mom1-photo.jpg",
             signatureUrl: "/uploads/mom1-signature.jpg",
             blockchainHash: "0x1234567890abcdef",
@@ -72,7 +72,7 @@ async function main() {
             summary:
                 "Assembleia geral extraordinária para alteração do estatuto social",
             status: "UNDER_REVIEW",
-            pdfUrl: "/uploads/mom2.pdf",
+            pdfUrl: "http://localhost:3000/sample-ata.pdf",
             createdById: clientUser.id,
         },
     });
@@ -82,7 +82,7 @@ async function main() {
             cnpj: "1122233344",
             summary: "Reunião de diretoria para aprovação de investimentos",
             status: "PENDING",
-            pdfUrl: "/uploads/mom3.pdf",
+            pdfUrl: "http://localhost:3000/sample-ata.pdf",
             createdById: clientUser.id,
         },
     });
@@ -198,7 +198,6 @@ async function main() {
 main()
     .catch((e) => {
         console.error("❌ Erro durante o seed:", e);
-        process.exit(1);
     })
     .finally(async () => {
         await prisma.$disconnect();

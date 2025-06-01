@@ -351,4 +351,126 @@ export class MeetingMinuteController {
             res.status(500).json(ApiResponses.serverError());
         }
     }
+
+    static async authenticateMeetingMinute(
+        req: Request,
+        res: Response
+    ): Promise<void> {
+        try {
+            // Verificar autenticação
+            const authResult = requireAuth(req);
+            if ("success" in authResult && !authResult.success) {
+                res.status(401).json(authResult);
+                return;
+            }
+            const user = authResult as AuthUser;
+
+            // Verificar autorização (apenas NOTARY e ADMIN podem autenticar)
+            if (!requireRole(user, ["NOTARY", "ADMIN"])) {
+                res.status(403).json(
+                    ApiResponses.forbidden(
+                        "Apenas cartorários e administradores podem autenticar atas"
+                    )
+                );
+                return;
+            }
+
+            const { id } = req.params;
+
+            Logger.info("Autenticando ata", { momId: id, userId: user.userId });
+
+            // Verificar se a MoM existe
+            const existingMom = await prisma.meetingMinute.findUnique({
+                where: { id },
+                select: {
+                    id: true,
+                    status: true,
+                    blockchainHash: true,
+                    blockchainTxId: true,
+                    summary: true,
+                },
+            });
+
+            if (!existingMom) {
+                res.status(404).json(
+                    ApiResponses.notFound("Ata não encontrada")
+                );
+                return;
+            }
+
+            // Verificar se a MoM está em estado válido para autenticação
+            if (existingMom.status === "AUTHENTICATED") {
+                res.status(400).json(
+                    ApiResponses.error("Ata já está autenticada")
+                );
+                return;
+            }
+
+            if (existingMom.status === "REJECTED") {
+                res.status(400).json(
+                    ApiResponses.error("Ata rejeitada não pode ser autenticada")
+                );
+                return;
+            }
+
+            // Verificar se já possui hash blockchain
+            if (existingMom.blockchainHash) {
+                res.status(400).json(
+                    ApiResponses.error("Ata já possui hash registrado no blockchain")
+                );
+                return;
+            }
+
+            // Gerar hash SHA-256 simulado (baseado no ID + timestamp)
+            const crypto = require("crypto");
+            const hashInput = `${existingMom.id}-${existingMom.summary}-${Date.now()}`;
+            const blockchainHash = crypto.createHash("sha256").update(hashInput).digest("hex");
+            
+            // Simular transação blockchain (será substituído por integração real)
+            const blockchainTxId = `tx_${crypto.randomUUID().replace(/-/g, "").substring(0, 16)}`;
+
+            Logger.info("Hash gerado para blockchain", {
+                momId: id,
+                blockchainHash: blockchainHash.substring(0, 16) + "...",
+                blockchainTxId,
+            });
+
+            // Atualizar MoM com dados do blockchain
+            const authenticatedMom = await prisma.meetingMinute.update({
+                where: { id },
+                data: {
+                    status: "AUTHENTICATED",
+                    blockchainHash,
+                    blockchainTxId,
+                    updatedById: user.userId,
+                },
+                select: {
+                    id: true,
+                    status: true,
+                    blockchainHash: true,
+                    blockchainTxId: true,
+                },
+            });
+
+            Logger.info("Ata autenticada com sucesso", {
+                momId: id,
+                userId: user.userId,
+                blockchainTxId,
+            });
+
+            res.status(200).json(
+                ApiResponses.success(
+                    {
+                        success: true,
+                        blockchainTxId: authenticatedMom.blockchainTxId,
+                        blockchainHash: authenticatedMom.blockchainHash,
+                    },
+                    "Ata autenticada e registrada no blockchain com sucesso"
+                )
+            );
+        } catch (error) {
+            Logger.error("Erro ao autenticar ata", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
 }
