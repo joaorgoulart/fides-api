@@ -12,7 +12,7 @@ export interface ApiResponse<T = any> {
 export interface AuthUser {
     userId: string;
     login: string;
-    accessLevel: "CLIENT" | "NOTARY" | "ADMIN";
+    accessLevel: "CLIENT" | "NOTARY";
 }
 
 // Respostas padronizadas
@@ -99,7 +99,7 @@ export function requireAuth(request: Request): AuthUser | ApiResponse {
 // Middleware de autorização por nível de acesso
 export function requireRole(
     user: AuthUser,
-    requiredRoles: ("CLIENT" | "NOTARY" | "ADMIN")[]
+    requiredRoles: ("CLIENT" | "NOTARY")[]
 ): boolean {
     return requiredRoles.includes(user.accessLevel);
 }

@@ -18,8 +18,7 @@ datasource db {
 model User {
     id          String      @id @default(cuid())
     login       String      @unique
-    email       String      @unique
-    name        String
+    cnpj        String? // CNPJ da empresa (opcional, para empresas clientes)
     accessLevel AccessLevel @default(CLIENT)
     password    String // Hash da senha
 
@@ -28,9 +27,7 @@ model User {
     updatedAt DateTime @updatedAt
 
     // Relacionamentos
-    createdMoMs MeetingMinute[] @relation("CreatedByUser")
-    updatedMoMs MeetingMinute[] @relation("UpdatedByUser")
-    comments    Comment[]       @relation("CommentAuthor")
+    meetingMinutes MeetingMinute[] @relation("CreatedByUser")
 
     @@map("users")
 }
@@ -39,7 +36,6 @@ model User {
 model MeetingMinute {
     id             String               @id @default(cuid())
     cnpj           String
-    submissionDate DateTime             @default(now())
     status         MeetingMinutesStatus @default(PENDING)
     summary        String
     pdfUrl         String?
@@ -53,19 +49,16 @@ model MeetingMinute {
     updatedAt DateTime @updatedAt
 
     // Relacionamentos
-    createdById String?
-    createdBy   User?   @relation("CreatedByUser", fields: [createdById], references: [id])
-    updatedById String?
-    updatedBy   User?   @relation("UpdatedByUser", fields: [updatedById], references: [id])
+    userId String?
+    user   User?   @relation("CreatedByUser", fields: [userId], references: [id])
 
     llmData          LLMData?
     validationReport ValidationReport?
-    comments         Comment[]
+    comments         String[]
 
     // Índices para performance
     @@index([cnpj])
     @@index([status])
-    @@index([submissionDate])
     @@index([blockchainHash])
     @@map("moms")
 }
@@ -134,31 +127,10 @@ model ValidationReport {
     @@map("validation_reports")
 }
 
-// Comentários sobre as MoMs
-model Comment {
-    id      String @id @default(cuid())
-    content String
-
-    // Timestamps
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    // Relacionamento com MoM
-    momId String
-    mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
-
-    // Relacionamento com usuário que criou o comentário
-    authorId String?
-    author   User?   @relation("CommentAuthor", fields: [authorId], references: [id])
-
-    @@map("comments")
-}
-
 // Enums
 enum AccessLevel {
     CLIENT
     NOTARY
-    ADMIN
 }
 
 enum MeetingMinutesStatus {

@@ -7,7 +7,6 @@ async function main() {
     console.log("🌱 Iniciando seed do banco de dados...");
 
     // Limpar dados existentes
-    await prisma.comment.deleteMany();
     await prisma.validationReport.deleteMany();
     await prisma.participant.deleteMany();
     await prisma.lLMData.deleteMany();
@@ -17,21 +16,10 @@ async function main() {
     // Criar usuários
     const hashedPassword = await bcrypt.hash("123456", 10);
 
-    const adminUser = await prisma.user.create({
-        data: {
-            login: "admin",
-            email: "admin@fides.com",
-            name: "Administrador",
-            accessLevel: "ADMIN",
-            password: hashedPassword,
-        },
-    });
-
     const notaryUser = await prisma.user.create({
         data: {
             login: "cartorario",
-            email: "cartorario@fides.com",
-            name: "João Silva",
+            cnpj: null,
             accessLevel: "NOTARY",
             password: hashedPassword,
         },
@@ -39,9 +27,17 @@ async function main() {
 
     const clientUser = await prisma.user.create({
         data: {
-            login: "cliente",
-            email: "cliente@empresa.com",
-            name: "Maria Santos",
+            login: "12345678000190",
+            cnpj: "12345678000190",
+            accessLevel: "CLIENT",
+            password: hashedPassword,
+        },
+    });
+
+    const clientUser2 = await prisma.user.create({
+        data: {
+            login: "98765432000110",
+            cnpj: "98765432000110",
             accessLevel: "CLIENT",
             password: hashedPassword,
         },
@@ -52,7 +48,7 @@ async function main() {
     // Criar MoMs de exemplo
     const mom1 = await prisma.meetingMinute.create({
         data: {
-            cnpj: "12345678901234",
+            cnpj: "12345678000190",
             summary:
                 "Reunião ordinária do conselho de administração para aprovação do orçamento anual",
             status: "AUTHENTICATED",
@@ -61,29 +57,36 @@ async function main() {
             signatureUrl: "/uploads/mom1-signature.jpg",
             blockchainHash: "0x1234567890abcdef",
             blockchainTxId: "tx_1234567890",
-            createdById: clientUser.id,
-            updatedById: notaryUser.id,
+            userId: clientUser.id,
+            comments: [
+                "Documento validado e autenticado com sucesso. Todas as assinaturas conferem.",
+                "Registro blockchain confirmado."
+            ],
         },
     });
 
     const mom2 = await prisma.meetingMinute.create({
         data: {
-            cnpj: "98765432101234",
+            cnpj: "98765432000110",
             summary:
                 "Assembleia geral extraordinária para alteração do estatuto social",
             status: "UNDER_REVIEW",
             pdfUrl: "http://localhost:3000/sample-ata.pdf",
-            createdById: clientUser.id,
+            userId: clientUser2.id,
+            comments: [
+                "Pendente verificação da assinatura do presidente. Solicitado nova documentação."
+            ],
         },
     });
 
     const mom3 = await prisma.meetingMinute.create({
         data: {
-            cnpj: "1122233344",
+            cnpj: "12345678000190",
             summary: "Reunião de diretoria para aprovação de investimentos",
             status: "PENDING",
             pdfUrl: "http://localhost:3000/sample-ata.pdf",
-            createdById: clientUser.id,
+            userId: clientUser.id,
+            comments: ["Aguardando análise inicial do documento."],
         },
     });
 
@@ -111,6 +114,27 @@ async function main() {
         },
     });
 
+    // Criar dados LLM para a segunda MoM
+    const llmData2 = await prisma.lLMData.create({
+        data: {
+            momId: mom2.id,
+            summary:
+                "Assembleia geral extraordinária realizada em 20/01/2024 para discussão de alterações no estatuto social da empresa.",
+            agenda: "Alteração do estatuto social; Aprovação de novas diretrizes; Eleição de novos membros",
+            subjects: ["Estatuto Social", "Diretrizes", "Eleições"],
+            deliberations: [
+                "Aprovada alteração do artigo 5º do estatuto",
+                "Aprovadas novas diretrizes de governança",
+                "Eleito novo conselho fiscal",
+            ],
+            signatures: [
+                "Ana Costa - Presidente",
+                "Carlos Silva - Diretor",
+            ],
+            keywords: ["estatuto", "assembleia", "alteração", "aprovação"],
+        },
+    });
+
     // Criar participantes
     await prisma.participant.createMany({
         data: [
@@ -135,12 +159,26 @@ async function main() {
                 cpf: "111.222.333-44",
                 role: "Conselheiro",
             },
+            {
+                llmDataId: llmData2.id,
+                name: "Ana Costa",
+                rg: "55.666.777-8",
+                cpf: "555.666.777-88",
+                role: "Presidente",
+            },
+            {
+                llmDataId: llmData2.id,
+                name: "Carlos Silva",
+                rg: "44.333.222-1",
+                cpf: "444.333.222-11",
+                role: "Diretor",
+            },
         ],
     });
 
     console.log("✅ Dados LLM e participantes criados");
 
-    // Criar relatório de validação
+    // Criar relatórios de validação
     await prisma.validationReport.create({
         data: {
             momId: mom1.id,
@@ -161,38 +199,28 @@ async function main() {
         },
     });
 
-    console.log("✅ Relatórios de validação criados");
-
-    // Criar comentários
-    await prisma.comment.createMany({
-        data: [
-            {
-                momId: mom1.id,
-                authorId: notaryUser.id,
-                content:
-                    "Documento validado e autenticado com sucesso. Todas as assinaturas conferem.",
-            },
-            {
-                momId: mom2.id,
-                authorId: notaryUser.id,
-                content:
-                    "Pendente verificação da assinatura do presidente. Solicitado nova documentação.",
-            },
-            {
-                momId: mom3.id,
-                authorId: adminUser.id,
-                content: "Aguardando análise inicial do documento.",
-            },
-        ],
+    await prisma.validationReport.create({
+        data: {
+            momId: mom3.id,
+            signaturesValid: true,
+            participantsValid: false,
+            inconsistencies: [
+                "Documento pendente de análise completa",
+            ],
+        },
     });
 
-    console.log("✅ Comentários criados");
+    console.log("✅ Relatórios de validação criados");
 
     console.log("🎉 Seed concluído com sucesso!");
     console.log("\n📋 Usuários criados:");
-    console.log("- Admin: admin / 123456");
     console.log("- Cartorário: cartorario / 123456");
-    console.log("- Cliente: cliente / 123456");
+    console.log("- Cliente: cliente / 123456 (CNPJ: 12.345.678/0001-90)");
+    console.log("- Empresa 2: empresa2 / 123456 (CNPJ: 98.765.432/0001-10)");
+    console.log("\n📄 MoMs criadas:");
+    console.log(`- MoM 1: ${mom1.id} (AUTHENTICATED)`);
+    console.log(`- MoM 2: ${mom2.id} (UNDER_REVIEW)`);
+    console.log(`- MoM 3: ${mom3.id} (PENDING)`);
 }
 
 main()

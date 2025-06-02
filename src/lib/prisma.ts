@@ -30,7 +30,6 @@ export const mapAccessLevel = (level: string) => {
     const levelMap = {
         client: "CLIENT",
         notary: "NOTARY",
-        admin: "ADMIN",
     } as const;
 
     return levelMap[level as keyof typeof levelMap] || "CLIENT";
@@ -58,12 +57,12 @@ export const buildMeetingMinutesFilters = (filters: {
     }
 
     if (filters.dateFrom || filters.dateTo) {
-        where.submissionDate = {};
+        where.createdAt = {};
         if (filters.dateFrom) {
-            where.submissionDate.gte = new Date(filters.dateFrom);
+            where.createdAt.gte = new Date(filters.dateFrom);
         }
         if (filters.dateTo) {
-            where.submissionDate.lte = new Date(filters.dateTo);
+            where.createdAt.lte = new Date(filters.dateTo);
         }
     }
 
