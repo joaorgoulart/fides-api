@@ -6,6 +6,12 @@ import {
     requireRole,
     Validators,
 } from "../lib/api-utils";
+import {
+    S3Service,
+    LLMService,
+    ValidationService,
+    FileUtils,
+} from "../lib/services";
 import prisma, { buildMeetingMinutesFilters } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Logger } from "../lib/api-utils";
@@ -416,18 +422,28 @@ export class MeetingMinuteController {
             // Verificar se já possui hash blockchain
             if (existingMom.blockchainHash) {
                 res.status(400).json(
-                    ApiResponses.error("Ata já possui hash registrado no blockchain")
+                    ApiResponses.error(
+                        "Ata já possui hash registrado no blockchain"
+                    )
                 );
                 return;
             }
 
             // Gerar hash SHA-256 simulado (baseado no ID + timestamp)
             const crypto = require("crypto");
-            const hashInput = `${existingMom.id}-${existingMom.summary}-${Date.now()}`;
-            const blockchainHash = crypto.createHash("sha256").update(hashInput).digest("hex");
-            
+            const hashInput = `${existingMom.id}-${
+                existingMom.summary
+            }-${Date.now()}`;
+            const blockchainHash = crypto
+                .createHash("sha256")
+                .update(hashInput)
+                .digest("hex");
+
             // Simular transação blockchain (será substituído por integração real)
-            const blockchainTxId = `tx_${crypto.randomUUID().replace(/-/g, "").substring(0, 16)}`;
+            const blockchainTxId = `tx_${crypto
+                .randomUUID()
+                .replace(/-/g, "")
+                .substring(0, 16)}`;
 
             Logger.info("Hash gerado para blockchain", {
                 momId: id,
@@ -470,6 +486,209 @@ export class MeetingMinuteController {
             );
         } catch (error) {
             Logger.error("Erro ao autenticar ata", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
+
+    static async createMeetingMinute(
+        req: Request,
+        res: Response
+    ): Promise<void> {
+        try {
+            // Verificar autenticação (CLIENT token para kiosk/dispositivo externo)
+            const authResult = requireAuth(req);
+            if ("success" in authResult && !authResult.success) {
+                res.status(401).json(authResult);
+                return;
+            }
+            const user = authResult as AuthUser;
+
+            Logger.info("Iniciando criação de nova ata", {
+                userId: user.userId,
+                accessLevel: user.accessLevel,
+            });
+
+            // Extrair dados do formulário
+            const { cnpj } = req.body;
+            const pdfFile = req.file; // Arquivo PDF do multer
+
+            // Validações básicas
+            if (!cnpj) {
+                res.status(400).json(ApiResponses.error("CNPJ é obrigatório"));
+                return;
+            }
+
+            if (!pdfFile) {
+                res.status(400).json(
+                    ApiResponses.error("Arquivo PDF é obrigatório")
+                );
+                return;
+            }
+
+            // Validar formato CNPJ (formato brasileiro)
+            const cnpjRegex = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{14}$/;
+            if (!cnpjRegex.test(cnpj)) {
+                res.status(400).json(
+                    ApiResponses.error(
+                        "CNPJ deve estar no formato válido (00.000.000/0000-00)"
+                    )
+                );
+                return;
+            }
+
+            // Validar arquivo PDF
+            const fileValidation = FileUtils.validatePDF(pdfFile.buffer);
+            if (!fileValidation.isValid) {
+                res.status(400).json(
+                    ApiResponses.error(
+                        fileValidation.error || "Arquivo PDF inválido"
+                    )
+                );
+                return;
+            }
+
+            Logger.info("Validações básicas concluídas", {
+                cnpj,
+                fileSize: pdfFile.size,
+                fileName: pdfFile.originalname,
+            });
+
+            // 1. Upload do PDF para S3
+            const pdfFileName = FileUtils.generateFileName(
+                pdfFile.originalname,
+                "ata_"
+            );
+            const pdfUrl = await S3Service.uploadFile(
+                pdfFile.buffer,
+                pdfFileName,
+                pdfFile.mimetype
+            );
+
+            Logger.info("Upload do PDF concluído", { pdfUrl });
+
+            // 2. Validar documento (malware, etc.)
+            const docValidation = await ValidationService.validateDocument(
+                pdfUrl
+            );
+            if (!docValidation.isValid) {
+                // Excluir arquivo se validação falhar
+                await S3Service.deleteFile(pdfUrl);
+                res.status(400).json(
+                    ApiResponses.error(
+                        `Documento inválido: ${docValidation.errors.join(", ")}`
+                    )
+                );
+                return;
+            }
+
+            // 3. Criar registro inicial da MoM no banco
+            const initialMom = await prisma.meetingMinute.create({
+                data: {
+                    cnpj,
+                    pdfUrl,
+                    status: "PENDING",
+                    summary: "Processando análise do documento...", // Temporário
+                    createdById: user.userId,
+                },
+            });
+
+            Logger.info("Registro inicial da ata criado", {
+                momId: initialMom.id,
+            });
+
+            // 4. Análise LLM do PDF (processo assíncrono)
+            try {
+                const llmAnalysis = await LLMService.analyzePDF(pdfUrl);
+
+                // Criar dados LLM no banco
+                const llmData = await prisma.lLMData.create({
+                    data: {
+                        momId: initialMom.id,
+                        summary: llmAnalysis.summary,
+                        agenda: llmAnalysis.agenda,
+                        subjects: llmAnalysis.subjects,
+                        deliberations: llmAnalysis.deliberations,
+                        signatures: llmAnalysis.signatures,
+                        keywords: llmAnalysis.keywords,
+                        participants: {
+                            create: llmAnalysis.participants.map(
+                                (participant: any) => ({
+                                    name: participant.name,
+                                    rg: participant.rg,
+                                    cpf: participant.cpf,
+                                    role: participant.role,
+                                })
+                            ),
+                        },
+                    },
+                });
+
+                // Atualizar MoM com summary da análise LLM
+                await prisma.meetingMinute.update({
+                    where: { id: initialMom.id },
+                    data: {
+                        summary: llmAnalysis.summary,
+                        status: "UNDER_REVIEW", // Pronta para revisão do cartorário
+                    },
+                });
+
+                Logger.info("Análise LLM e validação concluídas", {
+                    momId: initialMom.id,
+                    participantsCount: llmAnalysis.participants.length,
+                });
+            } catch (llmError) {
+                // Se falhar a análise LLM, manter MoM em PENDING
+                Logger.warn("Falha na análise LLM, mantendo ata em PENDING", {
+                    momId: initialMom.id,
+                    error: llmError,
+                });
+
+                await prisma.meetingMinute.update({
+                    where: { id: initialMom.id },
+                    data: {
+                        summary:
+                            "Erro na análise automática - revisão manual necessária",
+                    },
+                });
+            }
+
+            // Buscar MoM atualizada para retorno
+            const finalMom = await prisma.meetingMinute.findUnique({
+                where: { id: initialMom.id },
+                include: {
+                    llmData: {
+                        include: {
+                            participants: true,
+                        },
+                    },
+                    validationReport: true,
+                },
+            });
+
+            const responseData = {
+                id: finalMom!.id,
+                cnpj: finalMom!.cnpj,
+                submissionDate: finalMom!.submissionDate.toISOString(),
+                status: finalMom!.status.toLowerCase(),
+                summary: finalMom!.summary,
+                pdfUrl: finalMom!.pdfUrl,
+                success: true,
+            };
+
+            Logger.info("Ata criada com sucesso", {
+                momId: finalMom!.id,
+                status: finalMom!.status,
+                userId: user.userId,
+            });
+
+            res.status(201).json(
+                ApiResponses.success(
+                    responseData,
+                    "Ata submetida com sucesso. Análise LLM e validação iniciadas."
+                )
+            );
+        } catch (error) {
+            Logger.error("Erro ao criar ata", error);
             res.status(500).json(ApiResponses.serverError());
         }
     }
