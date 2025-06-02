@@ -25,8 +25,7 @@ export class AuthController {
                 select: {
                     id: true,
                     login: true,
-                    name: true,
-                    email: true,
+                    cnpj: true,
                     accessLevel: true,
                     password: true,
                 },
@@ -84,6 +83,88 @@ export class AuthController {
             );
         } catch (error) {
             Logger.error("Erro no login", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
+
+    static async register(req: Request, res: Response): Promise<void> {
+        try {
+            const { cnpj, password } = req.body;
+
+            // Validação básica
+            if (!cnpj || !password) {
+                res.status(400).json(
+                    ApiResponses.error("CNPJ e senha são obrigatórios")
+                );
+                return;
+            }
+
+            // Validação simples do CNPJ (14 dígitos)
+            const cnpjRegex = /^\d{14}$/;
+            if (!cnpjRegex.test(cnpj)) {
+                res.status(400).json(
+                    ApiResponses.error("CNPJ deve conter exatamente 14 dígitos")
+                );
+                return;
+            }
+
+            // Validação básica da senha
+            if (password.length < 6) {
+                res.status(400).json(
+                    ApiResponses.error("Senha deve ter pelo menos 6 caracteres")
+                );
+                return;
+            }
+
+            Logger.info("Tentativa de cadastro", { cnpj });
+
+            // Verificar se já existe usuário com este CNPJ
+            const existingUser = await prisma.user.findUnique({
+                where: { login: cnpj },
+            });
+
+            if (existingUser) {
+                res.status(409).json(
+                    ApiResponses.error("Já existe uma conta cadastrada com este CNPJ")
+                );
+                return;
+            }
+
+            // Hash da senha
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            // Criar usuário no banco
+            const newUser = await prisma.user.create({
+                data: {
+                    login: cnpj,
+                    cnpj: cnpj,
+                    password: hashedPassword,
+                    accessLevel: "CLIENT", // Por padrão, novos usuários são clientes
+                },
+                select: {
+                    id: true,
+                    login: true,
+                    cnpj: true,
+                    accessLevel: true,
+                },
+            });
+
+            Logger.info("Usuário cadastrado com sucesso", {
+                cnpj,
+                userId: newUser.id,
+            });
+
+            res.status(201).json(
+                ApiResponses.success(
+                    {
+                        user: newUser,
+                        message: "Conta criada com sucesso. Você já pode fazer login.",
+                    },
+                    "Cadastro realizado com sucesso"
+                )
+            );
+        } catch (error) {
+            Logger.error("Erro no cadastro", error);
             res.status(500).json(ApiResponses.serverError());
         }
     }

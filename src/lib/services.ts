@@ -1,6 +1,6 @@
+import { OpenAI } from "openai";
 import crypto from "crypto";
 import AWS from "aws-sdk";
-import { OpenAI } from "openai";
 
 // Interfaces para tipos de dados
 export interface LLMAnalysisResponse {

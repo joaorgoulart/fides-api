@@ -21,16 +21,13 @@ export class UserController {
                 select: {
                     id: true,
                     login: true,
-                    name: true,
-                    email: true,
+                    cnpj: true,
                     accessLevel: true,
                     createdAt: true,
                     updatedAt: true,
                     _count: {
                         select: {
-                            createdMoMs: true,
-                            updatedMoMs: true,
-                            comments: true,
+                            meetingMinutes: true,
                         },
                     },
                 },
@@ -47,15 +44,12 @@ export class UserController {
             const profile = {
                 id: userData.id,
                 login: userData.login,
-                name: userData.name,
-                email: userData.email,
+                cnpj: userData.cnpj,
                 accessLevel: userData.accessLevel.toLowerCase(),
                 createdAt: userData.createdAt.toISOString(),
                 updatedAt: userData.updatedAt.toISOString(),
                 stats: {
-                    createdMoMs: userData._count.createdMoMs,
-                    updatedMoMs: userData._count.updatedMoMs,
-                    comments: userData._count.comments,
+                    createdMoMs: userData._count.meetingMinutes,
                 },
             };
 
