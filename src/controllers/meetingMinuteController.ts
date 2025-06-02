@@ -52,7 +52,7 @@ export class MeetingMinuteController {
 
             // Adicionar filtro por usuário se for CLIENT
             if (user.accessLevel === "CLIENT") {
-                filters.createdById = user.userId;
+                filters.userId = user.userId;
             }
 
             // Parâmetros de paginação
@@ -63,16 +63,10 @@ export class MeetingMinuteController {
                 prisma.meetingMinute.findMany({
                     where: filters,
                     include: {
-                        createdBy: {
+                        user: {
                             select: {
                                 login: true,
-                                name: true,
-                            },
-                        },
-                        updatedBy: {
-                            select: {
-                                login: true,
-                                name: true,
+                                cnpj: true,
                             },
                         },
                         llmData: {
@@ -88,14 +82,9 @@ export class MeetingMinuteController {
                                 inconsistencies: true,
                             },
                         },
-                        _count: {
-                            select: {
-                                comments: true,
-                            },
-                        },
                     },
                     orderBy: {
-                        submissionDate: "desc",
+                        createdAt: "desc",
                     },
                     skip: pagination.offset,
                     take: pagination.limit,
@@ -107,7 +96,7 @@ export class MeetingMinuteController {
             const transformedMoms = moms.map((mom: any) => ({
                 id: mom.id,
                 cnpj: mom.cnpj,
-                submissionDate: mom.submissionDate.toISOString(),
+                submissionDate: mom.createdAt.toISOString(),
                 status: mom.status.toLowerCase(),
                 summary: mom.summary,
                 pdfUrl: mom.pdfUrl,
@@ -115,8 +104,7 @@ export class MeetingMinuteController {
                 signatureUrl: mom.signatureUrl,
                 blockchainHash: mom.blockchainHash,
                 blockchainTxId: mom.blockchainTxId,
-                createdBy: mom.createdBy,
-                updatedBy: mom.updatedBy,
+                createdBy: mom.user,
                 llmData: mom.llmData
                     ? {
                           summary: mom.llmData.summary,
@@ -124,7 +112,7 @@ export class MeetingMinuteController {
                       }
                     : undefined,
                 validationReport: mom.validationReport,
-                commentsCount: mom._count.comments,
+                commentsCount: mom.comments.length,
             }));
 
             const responseData = {
@@ -172,16 +160,10 @@ export class MeetingMinuteController {
             const mom = await prisma.meetingMinute.findUnique({
                 where: { id },
                 include: {
-                    createdBy: {
+                    user: {
                         select: {
                             login: true,
-                            name: true,
-                        },
-                    },
-                    updatedBy: {
-                        select: {
-                            login: true,
-                            name: true,
+                            cnpj: true,
                         },
                     },
                     llmData: {
@@ -190,19 +172,6 @@ export class MeetingMinuteController {
                         },
                     },
                     validationReport: true,
-                    comments: {
-                        include: {
-                            author: {
-                                select: {
-                                    login: true,
-                                    name: true,
-                                },
-                            },
-                        },
-                        orderBy: {
-                            createdAt: "desc",
-                        },
-                    },
                 },
             });
 
@@ -216,7 +185,7 @@ export class MeetingMinuteController {
             // Verificar se o usuário tem acesso (CLIENT só pode ver suas próprias MoMs)
             if (
                 user.accessLevel === "CLIENT" &&
-                mom.createdById !== user.userId
+                mom.userId !== user.userId
             ) {
                 res.status(403).json(
                     ApiResponses.forbidden("Acesso negado a esta ata")
@@ -228,7 +197,7 @@ export class MeetingMinuteController {
             const transformedMom = {
                 id: mom.id,
                 cnpj: mom.cnpj,
-                submissionDate: mom.submissionDate.toISOString(),
+                submissionDate: mom.createdAt.toISOString(),
                 status: mom.status.toLowerCase(),
                 summary: mom.summary,
                 pdfUrl: mom.pdfUrl,
@@ -236,8 +205,7 @@ export class MeetingMinuteController {
                 signatureUrl: mom.signatureUrl,
                 blockchainHash: mom.blockchainHash,
                 blockchainTxId: mom.blockchainTxId,
-                createdBy: mom.createdBy,
-                updatedBy: mom.updatedBy,
+                createdBy: mom.user,
                 llmData: mom.llmData
                     ? {
                           summary: mom.llmData.summary,
@@ -250,7 +218,7 @@ export class MeetingMinuteController {
                       }
                     : undefined,
                 validationReport: mom.validationReport,
-                comments: mom.comments.map((comment: any) => comment.content),
+                comments: mom.comments,
             };
 
             Logger.info("Ata encontrada", { momId: id, userId: user.userId });
@@ -275,11 +243,11 @@ export class MeetingMinuteController {
             }
             const user = authResult as AuthUser;
 
-            // Verificar autorização (apenas NOTARY e ADMIN podem atualizar)
-            if (!requireRole(user, ["NOTARY", "ADMIN"])) {
+            // Verificar autorização (apenas NOTARY podem atualizar)
+            if (!requireRole(user, ["NOTARY"])) {
                 res.status(403).json(
                     ApiResponses.forbidden(
-                        "Apenas cartorários e administradores podem atualizar atas"
+                        "Apenas cartorários podem atualizar atas"
                     )
                 );
                 return;
@@ -293,6 +261,9 @@ export class MeetingMinuteController {
             // Verificar se a MoM existe
             const existingMom = await prisma.meetingMinute.findUnique({
                 where: { id },
+                include: {
+                    llmData: true,
+                },
             });
 
             if (!existingMom) {
@@ -303,9 +274,7 @@ export class MeetingMinuteController {
             }
 
             // Campos que podem ser atualizados
-            const updateData: any = {
-                updatedById: user.userId,
-            };
+            const updateData: any = {};
 
             if (body.status && Validators.status(body.status)) {
                 updateData.status = body.status.toUpperCase();
@@ -313,6 +282,10 @@ export class MeetingMinuteController {
 
             if (body.summary) {
                 updateData.summary = body.summary;
+            }
+
+            if (body.comments && Array.isArray(body.comments)) {
+                updateData.comments = body.comments;
             }
 
             if (body.blockchainHash) {
@@ -323,21 +296,59 @@ export class MeetingMinuteController {
                 updateData.blockchainTxId = body.blockchainTxId;
             }
 
+            // Atualizar dados do LLM se fornecidos
+            if (body.llmData && existingMom.llmData) {
+                const llmUpdateData: any = {};
+                
+                if (body.llmData.summary) llmUpdateData.summary = body.llmData.summary;
+                if (body.llmData.agenda) llmUpdateData.agenda = body.llmData.agenda;
+                if (body.llmData.subjects) llmUpdateData.subjects = body.llmData.subjects;
+                if (body.llmData.deliberations) llmUpdateData.deliberations = body.llmData.deliberations;
+                if (body.llmData.signatures) llmUpdateData.signatures = body.llmData.signatures;
+                if (body.llmData.keywords) llmUpdateData.keywords = body.llmData.keywords;
+
+                // Atualizar participantes se fornecidos
+                if (body.llmData.participants && Array.isArray(body.llmData.participants)) {
+                    // Primeiro deletar participantes existentes
+                    await prisma.participant.deleteMany({
+                        where: { llmDataId: existingMom.llmData.id },
+                    });
+
+                    // Criar novos participantes
+                    await prisma.participant.createMany({
+                        data: body.llmData.participants.map((p: any) => ({
+                            llmDataId: existingMom.llmData!.id,
+                            name: p.name,
+                            rg: p.rg,
+                            cpf: p.cpf,
+                            role: p.role,
+                        })),
+                    });
+                }
+
+                // Atualizar dados do LLM
+                if (Object.keys(llmUpdateData).length > 0) {
+                    await prisma.lLMData.update({
+                        where: { id: existingMom.llmData.id },
+                        data: llmUpdateData,
+                    });
+                }
+            }
+
             // Atualizar MoM
             const updatedMom = await prisma.meetingMinute.update({
                 where: { id },
                 data: updateData,
                 include: {
-                    createdBy: {
+                    user: {
                         select: {
                             login: true,
-                            name: true,
+                            cnpj: true,
                         },
                     },
-                    updatedBy: {
-                        select: {
-                            login: true,
-                            name: true,
+                    llmData: {
+                        include: {
+                            participants: true,
                         },
                     },
                 },
@@ -371,11 +382,11 @@ export class MeetingMinuteController {
             }
             const user = authResult as AuthUser;
 
-            // Verificar autorização (apenas NOTARY e ADMIN podem autenticar)
-            if (!requireRole(user, ["NOTARY", "ADMIN"])) {
+            // Verificar autorização (apenas NOTARY podem autenticar)
+            if (!requireRole(user, ["NOTARY"])) {
                 res.status(403).json(
                     ApiResponses.forbidden(
-                        "Apenas cartorários e administradores podem autenticar atas"
+                        "Apenas cartorários podem autenticar atas"
                     )
                 );
                 return;
@@ -458,7 +469,6 @@ export class MeetingMinuteController {
                     status: "AUTHENTICATED",
                     blockchainHash,
                     blockchainTxId,
-                    updatedById: user.userId,
                 },
                 select: {
                     id: true,
@@ -588,7 +598,7 @@ export class MeetingMinuteController {
                     pdfUrl,
                     status: "PENDING",
                     summary: "Processando análise do documento...", // Temporário
-                    createdById: user.userId,
+                    userId: user.userId,
                 },
             });
 
@@ -668,7 +678,7 @@ export class MeetingMinuteController {
             const responseData = {
                 id: finalMom!.id,
                 cnpj: finalMom!.cnpj,
-                submissionDate: finalMom!.submissionDate.toISOString(),
+                submissionDate: finalMom!.createdAt.toISOString(),
                 status: finalMom!.status.toLowerCase(),
                 summary: finalMom!.summary,
                 pdfUrl: finalMom!.pdfUrl,
@@ -689,6 +699,185 @@ export class MeetingMinuteController {
             );
         } catch (error) {
             Logger.error("Erro ao criar ata", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
+
+    static async addComment(req: Request, res: Response): Promise<void> {
+        try {
+            // Verificar autenticação
+            const authResult = requireAuth(req);
+            if ("success" in authResult && !authResult.success) {
+                res.status(401).json(authResult);
+                return;
+            }
+            const user = authResult as AuthUser;
+
+            // Verificar autorização (apenas NOTARY podem adicionar comentários)
+            if (!requireRole(user, ["NOTARY"])) {
+                res.status(403).json(
+                    ApiResponses.forbidden(
+                        "Apenas cartorários podem adicionar comentários"
+                    )
+                );
+                return;
+            }
+
+            const { id } = req.params;
+            const { comment } = req.body;
+
+            if (!comment || typeof comment !== "string" || comment.trim() === "") {
+                res.status(400).json(
+                    ApiResponses.error("Comentário é obrigatório")
+                );
+                return;
+            }
+
+            Logger.info("Adicionando comentário à ata", {
+                momId: id,
+                userId: user.userId,
+            });
+
+            // Verificar se a MoM existe
+            const existingMom = await prisma.meetingMinute.findUnique({
+                where: { id },
+                select: { id: true, comments: true },
+            });
+
+            if (!existingMom) {
+                res.status(404).json(
+                    ApiResponses.notFound("Ata não encontrada")
+                );
+                return;
+            }
+
+            // Adicionar comentário à lista existente
+            const updatedComments = [...existingMom.comments, comment.trim()];
+
+            // Atualizar MoM com novo comentário
+            const updatedMom = await prisma.meetingMinute.update({
+                where: { id },
+                data: {
+                    comments: updatedComments,
+                },
+                select: {
+                    id: true,
+                    comments: true,
+                },
+            });
+
+            Logger.info("Comentário adicionado com sucesso", {
+                momId: id,
+                userId: user.userId,
+                commentsCount: updatedComments.length,
+            });
+
+            res.status(200).json(
+                ApiResponses.success(
+                    {
+                        comments: updatedMom.comments,
+                        commentsCount: updatedMom.comments.length,
+                    },
+                    "Comentário adicionado com sucesso"
+                )
+            );
+        } catch (error) {
+            Logger.error("Erro ao adicionar comentário", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
+
+    static async getMeetingMinutesByClient(
+        req: Request,
+        res: Response
+    ): Promise<void> {
+        try {
+            // Verificar autenticação
+            const authResult = requireAuth(req);
+            if ("success" in authResult && !authResult.success) {
+                res.status(401).json(authResult);
+                return;
+            }
+            const user = authResult as AuthUser;
+
+            const { cnpj } = req.params;
+
+            Logger.info("Buscando atas por CNPJ", {
+                cnpj,
+                userId: user.userId,
+                accessLevel: user.accessLevel,
+            });
+
+            // Verificar se o usuário CLIENT tem acesso ao CNPJ
+            if (user.accessLevel === "CLIENT") {
+                const userDetails = await prisma.user.findUnique({
+                    where: { id: user.userId },
+                    select: { cnpj: true },
+                });
+
+                if (!userDetails || userDetails.cnpj !== cnpj) {
+                    res.status(403).json(
+                        ApiResponses.forbidden(
+                            "Acesso negado. Você só pode visualizar atas do seu CNPJ"
+                        )
+                    );
+                    return;
+                }
+            }
+
+            // Parâmetros de paginação
+            const page = (req.query.page as string) || undefined;
+            const limit = (req.query.limit as string) || undefined;
+            const pagination = parsePaginationParams(page, limit);
+
+            // Buscar MoMs por CNPJ
+            const [moms, total] = await Promise.all([
+                prisma.meetingMinute.findMany({
+                    where: { cnpj },
+                    select: {
+                        id: true,
+                        cnpj: true,
+                        status: true,
+                        summary: true,
+                        pdfUrl: true,
+                        createdAt: true,
+                    },
+                    orderBy: {
+                        createdAt: "desc",
+                    },
+                    skip: pagination.offset,
+                    take: pagination.limit,
+                }),
+                prisma.meetingMinute.count({ where: { cnpj } }),
+            ]);
+
+            // Transformar dados para o formato da interface
+            const transformedMoms = moms.map((mom) => ({
+                id: mom.id,
+                submissionDate: mom.createdAt.toISOString(),
+                status: mom.status.toLowerCase(),
+                summary: mom.summary,
+                pdfUrl: mom.pdfUrl,
+            }));
+
+            const responseData = {
+                moms: transformedMoms,
+                total,
+                page: pagination.page,
+                limit: pagination.limit,
+                totalPages: Math.ceil(total / pagination.limit),
+            };
+
+            Logger.info("Atas encontradas por CNPJ", {
+                cnpj,
+                count: moms.length,
+                total,
+                userId: user.userId,
+            });
+
+            res.status(200).json(ApiResponses.success(responseData));
+        } catch (error) {
+            Logger.error("Erro ao buscar atas por CNPJ", error);
             res.status(500).json(ApiResponses.serverError());
         }
     }

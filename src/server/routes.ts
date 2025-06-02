@@ -24,6 +24,7 @@ const router = Router();
 
 // Auth
 router.post("/login", AuthController.login);
+router.post("/register", AuthController.register);
 
 // Meeting Minutes
 router.get("/meeting-minutes", MeetingMinuteController.getMeetingMinutes);
@@ -31,7 +32,13 @@ router.get(
     "/meeting-minutes/:id",
     MeetingMinuteController.getMeetingMinuteById
 );
-router.put("/meeting-minutes/:id", MeetingMinuteController.updateMeetingMinute);
+
+// PUT endpoint para atualizar meeting minutes
+router.put(
+    "/meeting-minutes/:id",
+    MeetingMinuteController.updateMeetingMinute
+);
+
 router.post(
     "/meeting-minutes/:id/authenticate",
     MeetingMinuteController.authenticateMeetingMinute
@@ -42,6 +49,18 @@ router.post(
     "/meeting-minutes",
     upload.single("pdf"),
     MeetingMinuteController.createMeetingMinute
+);
+
+// Nova rota para adicionar comentários
+router.post(
+    "/meeting-minutes/:id/comments",
+    MeetingMinuteController.addComment
+);
+
+// Nova rota para busca por CNPJ (para mobile app)
+router.get(
+    "/meeting-minutes/client/:cnpj",
+    MeetingMinuteController.getMeetingMinutesByClient
 );
 
 // User
