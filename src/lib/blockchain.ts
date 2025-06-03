@@ -28,7 +28,7 @@ export interface BlockData{
 export class BlockchainService {
     static async submitMomData(params: UploadToBlockchainParams): Promise<Block> {
         try {
-            const blockchainUrl = "";
+            const blockchainUrl = "" + "/upload";
             const config ={
               headers: {
                 'x-api-key': "" //load from .env
@@ -44,7 +44,7 @@ export class BlockchainService {
 
     static async verifyHash(hash: string): Promise<boolean>{
         try {
-            const blockchainUrl = "";
+            const blockchainUrl = "" + "/verify";
             const config ={
               headers: {
                 'x-api-key': "" //load from .env
