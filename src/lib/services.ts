@@ -138,56 +138,6 @@ export class ValidationService {
     }
 }
 
-export interface UploadToBlockchainParams{
-  hash: string;
-  momId: string;
-  notaryId: string;
-  userId: string;
-  cnpj: string;
-}
-
-// Serviço para integração com blockchain
-export class BlockchainService {
-    static async submitMomData(params: UploadToBlockchainParams): Promise<BlockchainResponse> {
-        try {
-            const blockchainUrl = "";
-            const config ={
-              headers: {
-                'x-api-key': ""
-              } 
-            };
-            const res = await axios.post(blockchainUrl, params, config);
-            return res.data;
-        } catch (error) {
-            console.error("❌ Erro ao submeter hash para blockchain:", error);
-            throw new Error("Falha no registro blockchain");
-        }
-    }
-
-    static async verifyHash(hash: string): Promise<boolean>{
-        try {
-            const blockchainUrl = "";
-            const config ={
-              headers: {
-                'x-api-key': ""
-              },
-              params:{
-                hash,
-              }
-            };
-            const res = await axios.get(blockchainUrl, config);
-            return res.data;
-        } catch (error) {
-            console.error("❌ Erro ao verificar existencia hash na blockchain:", error);
-            throw new Error("Falha ao verificar hash") 
-        }
-    }
-
-
-    static generateDocumentHash(content: string): string {
-        return crypto.createHash("sha256").update(content).digest("hex");
-    }
-}
 
 // Utilitários para validação de arquivos
 export class FileUtils {
