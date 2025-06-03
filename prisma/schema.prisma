@@ -43,6 +43,7 @@ model MeetingMinute {
     signatureUrl   String?
     blockchainHash String?              @unique
     blockchainTxId String?              @unique
+    notaryId       String?
 
     // Timestamps
     createdAt DateTime @default(now())
@@ -125,6 +126,16 @@ model ValidationReport {
     mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
 
     @@map("validation_reports")
+}
+
+model AppLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  type      String?  @map("type")
+  userId    String?  @map("user_id")
+  info      Json?    @map("info")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("app_logs")
 }
 
 // Enums
