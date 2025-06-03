@@ -42,6 +42,7 @@ export class MeetingMinuteController {
             const keywords = (req.query.keywords as string) || undefined;
             const page = (req.query.page as string) || undefined;
             const limit = (req.query.limit as string) || undefined;
+            const notaryId = (req.query.notaryId as string) || undefined;
 
             // Construir filtros
             const filters = buildMeetingMinutesFilters({
@@ -50,6 +51,7 @@ export class MeetingMinuteController {
                 dateFrom,
                 dateTo,
                 keywords,
+                notaryId,
             });
 
             // Adicionar filtro por usuário se for CLIENT
