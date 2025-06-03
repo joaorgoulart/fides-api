@@ -15,6 +15,8 @@ import {
 import prisma, { buildMeetingMinutesFilters } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Logger } from "../lib/api-utils";
+import crypto from "crypto";
+import { BlockchainService } from "../lib/blockchain";
 
 export class MeetingMinuteController {
     static async getMeetingMinutes(req: Request, res: Response): Promise<void> {
@@ -367,6 +369,32 @@ export class MeetingMinuteController {
             Logger.error("Erro ao atualizar Ata", error);
             res.status(500).json(ApiResponses.serverError());
         }
+    }
+
+    static async verifyMeetingMinute(
+      req: Request,
+      res: Response,
+    ): Promise<void>{
+      const pdfFile = req.file
+      if (!pdfFile){
+        res.status(400).json(
+          ApiResponses.error("Um arquivo deve ser providenciado")
+        );
+        return;
+      }
+      
+      const validateResult = FileUtils.validatePDF(pdfFile.buffer)
+      if (!validateResult.isValid){
+        res.status(400).json(
+          ApiResponses.error(validateResult.error ?? "")
+        );
+        return;
+      }
+      
+      const hash = crypto.createHash("sha256").update(pdfFile.buffer).digest("hex"); 
+      const blockchainRes = await BlockchainService.verifyHash(hash);
+      res.status(200).json({result: blockchainRes});
+      return;        
     }
 
     static async authenticateMeetingMinute(

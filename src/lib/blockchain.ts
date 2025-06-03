@@ -54,7 +54,7 @@ export class BlockchainService {
               }
             };
             const res = await axios.get(blockchainUrl, config);
-            return res.data;
+            return res?.data?.result ?? false;
         } catch (error) {
             console.error("❌ Erro ao verificar existencia hash na blockchain:", error);
             throw new Error("Falha ao verificar hash") 

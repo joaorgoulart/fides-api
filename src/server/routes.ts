@@ -63,6 +63,12 @@ router.get(
     MeetingMinuteController.getMeetingMinutesByClient
 );
 
+router.post(
+  "/meeting-minutes/verify",
+  upload.single("pdf"),
+  MeetingMinuteController.verifyMeetingMinute,
+);
+
 // User
 router.get("/user", UserController.getCurrentUser);
 
