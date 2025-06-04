@@ -26,11 +26,6 @@ export class UserController {
                     accessLevel: true,
                     createdAt: true,
                     updatedAt: true,
-                    _count: {
-                        select: {
-                            meetingMinutes: true,
-                        },
-                    },
                 },
             });
 
@@ -49,9 +44,6 @@ export class UserController {
                 accessLevel: userData.accessLevel.toLowerCase(),
                 createdAt: userData.createdAt.toISOString(),
                 updatedAt: userData.updatedAt.toISOString(),
-                stats: {
-                    createdMoMs: userData._count.meetingMinutes,
-                },
             };
 
             Logger.info("Perfil encontrado", { userId: user.userId });
@@ -454,11 +446,6 @@ export class UserController {
                     accessLevel: true,
                     createdAt: true,
                     updatedAt: true,
-                    _count: {
-                        select: {
-                            meetingMinutes: true,
-                        },
-                    },
                 },
                 orderBy: {
                     createdAt: 'desc',
@@ -473,9 +460,6 @@ export class UserController {
                 accessLevel: userData.accessLevel.toLowerCase(),
                 createdAt: userData.createdAt.toISOString(),
                 updatedAt: userData.updatedAt.toISOString(),
-                stats: {
-                    createdMoMs: userData._count.meetingMinutes,
-                },
             }));
 
             Logger.info("Lista de usuários retornada", { 
@@ -536,11 +520,6 @@ export class UserController {
                 select: {
                     id: true,
                     login: true,
-                    _count: {
-                        select: {
-                            meetingMinutes: true,
-                        },
-                    },
                 },
             });
 
@@ -551,15 +530,6 @@ export class UserController {
                 return;
             }
 
-            // Verificar se o usuário tem atas associadas
-            if (existingUser._count.meetingMinutes > 0) {
-                res.status(400).json(
-                    ApiResponses.error(
-                        `Não é possível deletar o usuário pois ele possui ${existingUser._count.meetingMinutes} ata(s) associada(s)`
-                    )
-                );
-                return;
-            }
 
             // Deletar usuário
             await prisma.user.delete({
