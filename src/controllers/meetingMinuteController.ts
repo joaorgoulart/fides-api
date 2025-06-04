@@ -15,6 +15,7 @@ import {
 import prisma, { buildMeetingMinutesFilters } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Logger } from "../lib/api-utils";
+import { AppLogsType } from "../enums/app-log-type";
 
 export class MeetingMinuteController {
     static async getMeetingMinutes(req: Request, res: Response): Promise<void> {
@@ -353,7 +354,16 @@ export class MeetingMinuteController {
                     },
                 },
             });
-
+            
+            const data ={
+              userId: user.userId,
+              type: AppLogsType.EditDetails,
+              info:{
+                momId: id,
+                updateData
+              }
+            };
+            prisma.appLog.create({data});
             Logger.info("Ata atualizada com sucesso", {
                 momId: id,
                 userId: user.userId,
@@ -605,7 +615,6 @@ export class MeetingMinuteController {
             Logger.info("Registro inicial da ata criado", {
                 momId: initialMom.id,
             });
-
             // 4. Análise LLM do PDF (processo assíncrono)
             try {
                 const llmAnalysis = await LLMService.analyzePDF(pdfUrl);
@@ -690,6 +699,15 @@ export class MeetingMinuteController {
                 status: finalMom!.status,
                 userId: user.userId,
             });
+            
+            const data ={
+              userId: user.userId,
+              type: AppLogsType.CreateMom,
+              info:{
+                ...finalMom
+              }
+            }; 
+            prisma.appLog.create({data});
 
             res.status(201).json(
                 ApiResponses.success(
@@ -737,7 +755,6 @@ export class MeetingMinuteController {
                 momId: id,
                 userId: user.userId,
             });
-
             // Verificar se a MoM existe
             const existingMom = await prisma.meetingMinute.findUnique({
                 where: { id },
@@ -771,6 +788,14 @@ export class MeetingMinuteController {
                 userId: user.userId,
                 commentsCount: updatedComments.length,
             });
+            const data ={
+              userId: user.userId,
+              type: AppLogsType.CreateMom,
+              info:{
+                comment
+              }
+            }; 
+            prisma.appLog.create({data});
 
             res.status(200).json(
                 ApiResponses.success(

@@ -4,5 +4,6 @@ export enum AppLogsType{
   RegisterSuccess = "REGISTER_SUCCESS",
   RegisterFailure = "REGISTER_FAILURE",
   PdfUploadSuccess = "PDF_UPLOAD_SUCCESS",
-  EditDetails = "EDIT_DETAILS"
+  CreateMom = "CREATE_MOM",
+  EditDetails = "EDIT_DETAILS",
 }
