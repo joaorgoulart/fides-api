@@ -6,4 +6,5 @@ export enum AppLogsType{
   PdfUploadSuccess = "PDF_UPLOAD_SUCCESS",
   CreateMom = "CREATE_MOM",
   EditDetails = "EDIT_DETAILS",
+  EditLLMData = "EDIT_LLM_DATA",
 }

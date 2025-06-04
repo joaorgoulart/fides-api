@@ -721,6 +721,197 @@ export class MeetingMinuteController {
         }
     }
 
+    static async updateLLMData(req: Request, res: Response): Promise<void> {
+        try {
+            // Verificar autenticação
+            const authResult = requireAuth(req);
+            if ("success" in authResult && !authResult.success) {
+                res.status(401).json(authResult);
+                return;
+            }
+            const user = authResult as AuthUser;
+
+            // Verificar autorização (apenas NOTARY podem editar dados LLM)
+            if (!requireRole(user, ["NOTARY"])) {
+                res.status(403).json(
+                    ApiResponses.forbidden(
+                        "Apenas cartorários podem editar dados LLM"
+                    )
+                );
+                return;
+            }
+
+            const { id } = req.params;
+            const { llmData } = req.body;
+
+            Logger.info("Atualizando dados LLM", { momId: id, userId: user.userId });
+
+            // Verificar se a MoM existe e tem dados LLM
+            const existingMom = await prisma.meetingMinute.findUnique({
+                where: { id },
+                include: {
+                    llmData: {
+                        include: {
+                            participants: true,
+                        },
+                    },
+                },
+            });
+
+            if (!existingMom) {
+                res.status(404).json(
+                    ApiResponses.notFound("Ata não encontrada")
+                );
+                return;
+            }
+
+            if (!existingMom.llmData) {
+                res.status(400).json(
+                    ApiResponses.error("Esta ata não possui dados LLM para editar")
+                );
+                return;
+            }
+
+            // Validar dados de entrada
+            if (!llmData) {
+                res.status(400).json(
+                    ApiResponses.error("Dados LLM são obrigatórios")
+                );
+                return;
+            }
+
+            // Preparar dados para atualização
+            const llmUpdateData: any = {};
+
+            if (llmData.summary && typeof llmData.summary === 'string') {
+                llmUpdateData.summary = llmData.summary.trim();
+            }
+
+            if (llmData.agenda && typeof llmData.agenda === 'string') {
+                llmUpdateData.agenda = llmData.agenda.trim();
+            }
+
+            if (llmData.subjects && Array.isArray(llmData.subjects)) {
+                llmUpdateData.subjects = llmData.subjects.filter(
+                    (subject: any) => typeof subject === 'string' && subject.trim()
+                ).map((subject: string) => subject.trim());
+            }
+
+            if (llmData.deliberations && Array.isArray(llmData.deliberations)) {
+                llmUpdateData.deliberations = llmData.deliberations.filter(
+                    (deliberation: any) => typeof deliberation === 'string' && deliberation.trim()
+                ).map((deliberation: string) => deliberation.trim());
+            }
+
+            if (llmData.signatures && Array.isArray(llmData.signatures)) {
+                llmUpdateData.signatures = llmData.signatures.filter(
+                    (signature: any) => typeof signature === 'string' && signature.trim()
+                ).map((signature: string) => signature.trim());
+            }
+
+            if (llmData.keywords && Array.isArray(llmData.keywords)) {
+                llmUpdateData.keywords = llmData.keywords.filter(
+                    (keyword: any) => typeof keyword === 'string' && keyword.trim()
+                ).map((keyword: string) => keyword.trim());
+            }
+
+            // Atualizar participantes se fornecidos
+            if (llmData.participants && Array.isArray(llmData.participants)) {
+                // Validar estrutura dos participantes
+                const validParticipants = llmData.participants.filter((p: any) => {
+                    return p && 
+                        typeof p.name === 'string' && p.name.trim() &&
+                        typeof p.rg === 'string' && p.rg.trim() &&
+                        typeof p.cpf === 'string' && p.cpf.trim() &&
+                        typeof p.role === 'string' && p.role.trim();
+                });
+
+                if (validParticipants.length !== llmData.participants.length) {
+                    res.status(400).json(
+                        ApiResponses.error("Todos os participantes devem ter name, rg, cpf e role válidos")
+                    );
+                    return;
+                }
+
+                // Deletar participantes existentes
+                await prisma.participant.deleteMany({
+                    where: { llmDataId: existingMom.llmData.id },
+                });
+
+                // Criar novos participantes
+                if (validParticipants.length > 0) {
+                    await prisma.participant.createMany({
+                        data: validParticipants.map((p: any) => ({
+                            llmDataId: existingMom.llmData!.id,
+                            name: p.name.trim(),
+                            rg: p.rg.trim(),
+                            cpf: p.cpf.trim(),
+                            role: p.role.trim(),
+                        })),
+                    });
+                }
+            }
+
+            // Atualizar dados do LLM se houver mudanças
+            if (Object.keys(llmUpdateData).length > 0) {
+                await prisma.lLMData.update({
+                    where: { id: existingMom.llmData.id },
+                    data: llmUpdateData,
+                });
+            }
+
+            // Buscar dados atualizados
+            const updatedMom = await prisma.meetingMinute.findUnique({
+                where: { id },
+                include: {
+                    llmData: {
+                        include: {
+                            participants: true,
+                        },
+                    },
+                },
+            });
+
+            // Transformar dados para o formato da interface
+            const transformedLLMData = updatedMom?.llmData ? {
+                summary: updatedMom.llmData.summary,
+                subjects: updatedMom.llmData.subjects,
+                agenda: updatedMom.llmData.agenda,
+                deliberations: updatedMom.llmData.deliberations,
+                participants: updatedMom.llmData.participants,
+                signatures: updatedMom.llmData.signatures,
+                keywords: updatedMom.llmData.keywords,
+            } : null;
+
+            // Log da operação
+            const data = {
+                userId: user.userId,
+                type: AppLogsType.EditLLMData,
+                info: {
+                    momId: id,
+                    updatedFields: Object.keys(llmUpdateData),
+                    participantsCount: llmData.participants?.length || 0,
+                }
+            };
+            prisma.appLog.create({ data });
+
+            Logger.info("Dados LLM atualizados com sucesso", {
+                momId: id,
+                userId: user.userId,
+                changes: Object.keys(llmUpdateData),
+                participantsCount: llmData.participants?.length || 0,
+            });
+
+            res.status(200).json(
+                ApiResponses.success(transformedLLMData, "Dados LLM atualizados com sucesso")
+            );
+        } catch (error) {
+            Logger.error("Erro ao atualizar dados LLM", error);
+            res.status(500).json(ApiResponses.serverError());
+        }
+    }
+
+
     static async addComment(req: Request, res: Response): Promise<void> {
         try {
             // Verificar autenticação
