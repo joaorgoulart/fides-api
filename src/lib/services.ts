@@ -2,6 +2,7 @@ import { OpenAI } from "openai";
 import crypto from "crypto";
 import AWS from "aws-sdk";
 import axios from "axios";  
+import FormData from "form-data"; 
 
 // Interfaces para tipos de dados
 export interface LLMAnalysisResponse {
@@ -124,46 +125,73 @@ export class LLMService {
 // Serviço para validação de assinaturas e participantes
 export class ValidationService {
     static async validateDocument(
-        pdfUrl: string
-    ): Promise<{ isValid: boolean; errors: string[] }> {
-        console.log(`📄 Validando documento PDF: ${pdfUrl}`);
+        file: Express.Multer.File
+    ): Promise<any> {
+    // Create a FormData instance
+    const form = new FormData();
 
-        // Simulação de validação de malware e formato
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Append the file to the form data
+    form.append('signature_files[]', file.buffer, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+    });
 
-        return {
-            isValid: true,
-            errors: [],
-        };
+    try {
+      // Send POST request to the VALIDAR API
+      const response = await axios.post('https://validar.iti.gov.br/arquivo', form, {
+        headers: {
+          ...form.getHeaders(),
+          'Origin': 'https://validar.iti.gov.br',
+          'Referer': 'https://validar.iti.gov.br/',
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+
+      // Return the response data
+      return response.data;
+    } catch (error: any) {
+      // Handle errors
+      if (error.response) {
+        // Server responded with a status code outside 2xx
+        throw new Error(`VALIDAR API error: ${error.response.status} - ${error.response.data}`);
+      } else if (error.request) {
+        // No response received
+        throw new Error('No response received from VALIDAR API.');
+      } else {
+        // Other errors
+        throw new Error(`Error sending request to VALIDAR API: ${error.message}`);
+      }
     }
+  }
 }
 
 
 // Utilitários para validação de arquivos
 export class FileUtils {
-    static validatePDF(buffer: Buffer): { isValid: boolean; error?: string } {
-        // Verificar assinatura PDF
-        const pdfHeader = buffer.toString("ascii", 0, 4);
-        if (pdfHeader !== "%PDF") {
-            return { isValid: false, error: "Arquivo não é um PDF válido" };
-        }
-
-        // Verificar tamanho (máximo 10MB conforme PRD)
-        const maxSize = 10 * 1024 * 1024; // 10MB
-        if (buffer.length > maxSize) {
-            return {
-                isValid: false,
-                error: "Arquivo excede o tamanho máximo de 10MB",
-            };
-        }
-
-        return { isValid: true };
+  static validatePDF(buffer: Buffer): { isValid: boolean; error?: string } {
+    // Verificar assinatura PDF
+    const pdfHeader = buffer.toString("ascii", 0, 4);
+    if (pdfHeader !== "%PDF") {
+      return { isValid: false, error: "Arquivo não é um PDF válido" };
     }
 
-    static generateFileName(originalName: string, prefix: string = ""): string {
-        const timestamp = Date.now();
-        const random = crypto.randomBytes(4).toString("hex");
-        const extension = originalName.split(".").pop();
-        return `${prefix}${timestamp}_${random}.${extension}`;
+    // Verificar tamanho (máximo 10MB conforme PRD)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (buffer.length > maxSize) {
+      return {
+        isValid: false,
+        error: "Arquivo excede o tamanho máximo de 10MB",
+      };
     }
+
+    return { isValid: true };
+  }
+
+  static generateFileName(originalName: string, prefix: string = ""): string {
+    const timestamp = Date.now();
+    const random = crypto.randomBytes(4).toString("hex");
+    const extension = originalName.split(".").pop();
+    return `${prefix}${timestamp}_${random}.${extension}`;
+  }
 }
