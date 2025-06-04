@@ -588,9 +588,9 @@ export class MeetingMinuteController {
 
             // 2. Validar documento (malware, etc.)
             const docValidation = await ValidationService.validateDocument(
-                pdfUrl
+                pdfFile
             );
-            if (!docValidation.isValid) {
+            if (!docValidation?.document?.validity) {
                 // Excluir arquivo se validação falhar
                 await S3Service.deleteFile(pdfUrl);
                 res.status(400).json(
@@ -788,14 +788,6 @@ export class MeetingMinuteController {
                 userId: user.userId,
                 commentsCount: updatedComments.length,
             });
-            const data ={
-              userId: user.userId,
-              type: AppLogsType.CreateMom,
-              info:{
-                comment
-              }
-            }; 
-            prisma.appLog.create({data});
 
             res.status(200).json(
                 ApiResponses.success(
