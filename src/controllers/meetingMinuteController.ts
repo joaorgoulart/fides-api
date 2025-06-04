@@ -64,23 +64,10 @@ export class MeetingMinuteController {
                 prisma.meetingMinute.findMany({
                     where: filters,
                     include: {
-                        user: {
-                            select: {
-                                login: true,
-                                cnpj: true,
-                            },
-                        },
                         llmData: {
                             select: {
                                 summary: true,
                                 keywords: true,
-                            },
-                        },
-                        validationReport: {
-                            select: {
-                                signaturesValid: true,
-                                participantsValid: true,
-                                inconsistencies: true,
                             },
                         },
                     },
@@ -112,7 +99,6 @@ export class MeetingMinuteController {
                           keywords: mom.llmData.keywords,
                       }
                     : undefined,
-                validationReport: mom.validationReport,
                 commentsCount: mom.comments.length,
             }));
 
@@ -148,31 +134,29 @@ export class MeetingMinuteController {
                 res.status(401).json(authResult);
                 return;
             }
-            const user = authResult as AuthUser;
+
+            const user = await prisma.user.findUnique({
+                where: {
+                    id: (authResult as AuthUser).userId,
+                },
+            });
 
             const { id } = req.params;
 
             Logger.info("Buscando ata por ID", {
                 momId: id,
-                userId: user.userId,
+                userId: user?.id,
             });
 
             // Buscar MoM
             const mom = await prisma.meetingMinute.findUnique({
                 where: { id },
                 include: {
-                    user: {
-                        select: {
-                            login: true,
-                            cnpj: true,
-                        },
-                    },
                     llmData: {
                         include: {
                             participants: true,
                         },
                     },
-                    validationReport: true,
                 },
             });
 
@@ -185,8 +169,8 @@ export class MeetingMinuteController {
 
             // Verificar se o usuário tem acesso (CLIENT só pode ver suas próprias MoMs)
             if (
-                user.accessLevel === "CLIENT" &&
-                mom.userId !== user.userId
+                user?.accessLevel === "CLIENT" && user.cnpj !== null &&
+                mom.cnpj !== user?.cnpj
             ) {
                 res.status(403).json(
                     ApiResponses.forbidden("Acesso negado a esta ata")
@@ -206,7 +190,6 @@ export class MeetingMinuteController {
                 signatureUrl: mom.signatureUrl,
                 blockchainHash: mom.blockchainHash,
                 blockchainTxId: mom.blockchainTxId,
-                createdBy: mom.user,
                 llmData: mom.llmData
                     ? {
                           summary: mom.llmData.summary,
@@ -218,11 +201,10 @@ export class MeetingMinuteController {
                           keywords: mom.llmData.keywords,
                       }
                     : undefined,
-                validationReport: mom.validationReport,
                 comments: mom.comments,
             };
 
-            Logger.info("Ata encontrada", { momId: id, userId: user.userId });
+            Logger.info("Ata encontrada", { momId: id, userId: user?.id });
 
             res.status(200).json(ApiResponses.success(transformedMom));
         } catch (error) {
@@ -341,12 +323,6 @@ export class MeetingMinuteController {
                 where: { id },
                 data: updateData,
                 include: {
-                    user: {
-                        select: {
-                            login: true,
-                            cnpj: true,
-                        },
-                    },
                     llmData: {
                         include: {
                             participants: true,
@@ -515,19 +491,6 @@ export class MeetingMinuteController {
         res: Response
     ): Promise<void> {
         try {
-            // Verificar autenticação (CLIENT token para kiosk/dispositivo externo)
-            const authResult = requireAuth(req);
-            if ("success" in authResult && !authResult.success) {
-                res.status(401).json(authResult);
-                return;
-            }
-            const user = authResult as AuthUser;
-
-            Logger.info("Iniciando criação de nova ata", {
-                userId: user.userId,
-                accessLevel: user.accessLevel,
-            });
-
             // Extrair dados do formulário
             const { cnpj } = req.body;
             const pdfFile = req.file; // Arquivo PDF do multer
@@ -541,17 +504,6 @@ export class MeetingMinuteController {
             if (!pdfFile) {
                 res.status(400).json(
                     ApiResponses.error("Arquivo PDF é obrigatório")
-                );
-                return;
-            }
-
-            // Validar formato CNPJ (formato brasileiro)
-            const cnpjRegex = /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$|^\d{14}$/;
-            if (!cnpjRegex.test(cnpj)) {
-                res.status(400).json(
-                    ApiResponses.error(
-                        "CNPJ deve estar no formato válido (00.000.000/0000-00)"
-                    )
                 );
                 return;
             }
@@ -587,28 +539,28 @@ export class MeetingMinuteController {
             Logger.info("Upload do PDF concluído", { pdfUrl });
 
             // 2. Validar documento (malware, etc.)
-            const docValidation = await ValidationService.validateDocument(
-                pdfFile
-            );
-            if (!docValidation?.document?.validity) {
-                // Excluir arquivo se validação falhar
-                await S3Service.deleteFile(pdfUrl);
-                res.status(400).json(
-                    ApiResponses.error(
-                        `Documento inválido: ${docValidation.errors.join(", ")}`
-                    )
-                );
-                return;
-            }
+            // const docValidation = await ValidationService.validateDocument(
+            //     pdfFile
+            // );
+            // if (!docValidation?.document?.validity) {
+            //     // Excluir arquivo se validação falhar
+            //     await S3Service.deleteFile(pdfUrl);
+            //     res.status(400).json(
+            //         ApiResponses.error(
+            //             `Documento inválido: ${docValidation.errors.join(", ")}`
+            //         )
+            //     );
+            //     return;
+            // }
 
             // 3. Criar registro inicial da MoM no banco
             const initialMom = await prisma.meetingMinute.create({
                 data: {
                     cnpj,
                     pdfUrl,
+                    signaturesValid: false, // docValidation.document.validity,
                     status: "PENDING",
                     summary: "Processando análise do documento...", // Temporário
-                    userId: user.userId,
                 },
             });
 
@@ -680,7 +632,6 @@ export class MeetingMinuteController {
                             participants: true,
                         },
                     },
-                    validationReport: true,
                 },
             });
 
@@ -697,11 +648,11 @@ export class MeetingMinuteController {
             Logger.info("Ata criada com sucesso", {
                 momId: finalMom!.id,
                 status: finalMom!.status,
-                userId: user.userId,
+                cnpj: finalMom!.cnpj,
             });
             
             const data ={
-              userId: user.userId,
+              cnpj: finalMom!.cnpj,
               type: AppLogsType.CreateMom,
               info:{
                 ...finalMom
