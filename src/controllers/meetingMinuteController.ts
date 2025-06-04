@@ -15,6 +15,8 @@ import {
 import prisma, { buildMeetingMinutesFilters } from "../lib/prisma";
 import { Request, Response } from "express";
 import { Logger } from "../lib/api-utils";
+import crypto from "crypto";
+import { BlockchainService } from "../lib/blockchain";
 import { AppLogsType } from "../enums/app-log-type";
 
 export class MeetingMinuteController {
@@ -41,6 +43,7 @@ export class MeetingMinuteController {
             const keywords = (req.query.keywords as string) || undefined;
             const page = (req.query.page as string) || undefined;
             const limit = (req.query.limit as string) || undefined;
+            const notaryId = (req.query.notaryId as string) || undefined;
 
             // Construir filtros
             const filters = buildMeetingMinutesFilters({
@@ -49,6 +52,7 @@ export class MeetingMinuteController {
                 dateFrom,
                 dateTo,
                 keywords,
+                notaryId,
             });
 
             // Adicionar filtro por usuário se for CLIENT
@@ -353,6 +357,32 @@ export class MeetingMinuteController {
             Logger.error("Erro ao atualizar Ata", error);
             res.status(500).json(ApiResponses.serverError());
         }
+    }
+
+    static async verifyMeetingMinute(
+      req: Request,
+      res: Response,
+    ): Promise<void>{
+      const pdfFile = req.file
+      if (!pdfFile){
+        res.status(400).json(
+          ApiResponses.error("Um arquivo deve ser providenciado")
+        );
+        return;
+      }
+      
+      const validateResult = FileUtils.validatePDF(pdfFile.buffer)
+      if (!validateResult.isValid){
+        res.status(400).json(
+          ApiResponses.error(validateResult.error ?? "")
+        );
+        return;
+      }
+      
+      const hash = crypto.createHash("sha256").update(pdfFile.buffer).digest("hex"); 
+      const blockchainRes = await BlockchainService.verifyHash(hash);
+      res.status(200).json({result: blockchainRes});
+      return;        
     }
 
     static async authenticateMeetingMinute(

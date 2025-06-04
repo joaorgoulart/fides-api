@@ -42,6 +42,7 @@ export const buildMeetingMinutesFilters = (filters: {
     dateTo?: string;
     status?: string;
     keywords?: string;
+    notaryId?: string;
 }) => {
     const where: any = {};
 
@@ -64,6 +65,12 @@ export const buildMeetingMinutesFilters = (filters: {
         if (filters.dateTo) {
             where.createdAt.lte = new Date(filters.dateTo);
         }
+    }
+
+    if(filters.notaryId){
+      where.notaryId ={
+        equals: filters.notaryId
+      }
     }
 
     if (filters.keywords) {
