@@ -3,6 +3,9 @@ import crypto from "crypto";
 import AWS from "aws-sdk";
 import axios from "axios";  
 import FormData from "form-data"; 
+import { unlink , writeFile} from "fs/promises";
+import { promisify } from "util";
+import { execFile } from "child_process";
 
 // Interfaces para tipos de dados
 export interface LLMAnalysisResponse {
@@ -26,6 +29,7 @@ export interface BlockchainResponse {
     hash: string;
 }
 
+const execFileAsync = promisify(execFile);
 
 // Serviços simulados para integração com AWS S3
 export class S3Service {
@@ -163,6 +167,102 @@ export class ValidationService {
         throw new Error(`Error sending request to VALIDAR API: ${error.message}`);
       }
     }
+  }
+
+  static async extractDigitalSignatures(file: Express.Multer.File){
+    try{
+      const tempPath = `/tmp/upload-${crypto.randomUUID()}.pdf`;
+      await writeFile(tempPath, file.buffer);
+
+      const { stdout } = await execFileAsync('pdfsig', [tempPath]);
+      unlink(tempPath);
+
+      return this.parsePdfSigOutput(stdout);
+    } catch (error) {
+      console.error('Error extracting signatures:', error);
+      return null;
+    }
+  }
+
+  static parsePdfSigOutput(output: string) {
+    const lines = output.split('\n');
+    const sigs: any[] = [];
+    let current: any = {};
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (/^Signature \d+:$/.test(trimmed)) {
+        if (Object.keys(current).length > 0) sigs.push(current);
+        current = {};
+      } else {
+        const [key, rest] = trimmed.split(':', 2);
+        if (key && rest.length) {
+          const parsedKey = this.parsePdfSigKey(key);
+          current[parsedKey] = this.parsePdfSigValue(key, rest); 
+        }
+      }
+    }
+
+    if (Object.keys(current).length > 0) sigs.push(current);
+
+    return sigs;
+  }
+
+  static parsePdfSigKey(rawKey: string): string{
+    const lwKey = rawKey.toLowerCase();
+    if(lwKey.includes("field name"))
+      return "name";
+    if(lwKey.includes("certificate common name"))
+      return "ccn";
+    if(lwKey.includes("distinguished name"))
+      return "distinguishedName";
+    if(lwKey.includes("time"))
+      return "timestamp";
+    if(lwKey.includes("hash algorithm"))
+      return "hashAlgo";
+    if(lwKey.includes("type"))
+      return "type";
+    if(lwKey.includes("ranges"))
+      return "ranges";
+    if(lwKey.includes("signature validation"))
+      return "validity";
+    if(lwKey.includes("certificate validation"))
+      return "issuer";
+    if(lwKey.includes("total document signed"))
+      return "total";
+    return "unknown";
+  }
+
+  static parsePdfSigValue(key: string, rawValue: string){
+    switch(key){
+      case "validity":
+        return rawValue.includes("is Valid");
+      case "timestamp":
+        return new Date(rawValue.trim()) || rawValue.trim();
+      case "ranges":
+        return this.parsePdfSigKeyRanges(rawValue) ?? [];
+      default:
+        rawValue
+    }
+  }
+
+  static parsePdfSigKeyRanges(ranges: string): [number, number][]{
+    // Remove unnecessary whitespace and newlines
+    const cleaned = ranges.replace(/\s+/g, ' ').trim();
+
+    // Match all ranges like [0 - 606577]
+    const regex = /\[(\d+)\s*-\s*(\d+)\]/g;
+
+    const result: [number, number][] = [];
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(cleaned)) !== null) {
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      result.push([start, end]);
+    }
+
+    return result;
   }
 }
 
