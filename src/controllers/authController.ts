@@ -3,19 +3,31 @@ import { Request, Response } from "express";
 import prisma from "../lib/prisma";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { AppLogsType } from "../enums/app-log-type";
 
 export class AuthController {
     static async login(req: Request, res: Response): Promise<void> {
         try {
             const { login, password } = req.body;
 
+            let data ={
+              userId: "",
+              type: AppLogsType.LoginFailure,
+              info:{
+                login,
+                reason: "",
+              }
+            };
             // Validação básica
             if (!login || !password) {
                 res.status(400).json(
                     ApiResponses.error("Login e senha são obrigatórios")
                 );
+                data.info.reason = "Missing Credentials";
+                prisma.appLog.create({data});
                 return;
             }
+            
 
             Logger.info("Tentativa de login", { login });
 
@@ -30,11 +42,13 @@ export class AuthController {
                     password: true,
                 },
             });
-
+                  
             if (!user) {
                 res.status(401).json(
                     ApiResponses.unauthorized("Credenciais inválidas")
                 );
+                data.info.reason = "Invalid Credentials";
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -49,6 +63,9 @@ export class AuthController {
                 res.status(401).json(
                     ApiResponses.unauthorized("Credenciais inválidas")
                 );
+                data.info.reason = "Invalid Password";
+                data.userId = user.id;
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -70,6 +87,8 @@ export class AuthController {
                 login,
                 accessLevel: user.accessLevel,
             });
+            data.type = AppLogsType.LoginSuccess;
+            await prisma.appLog.create({data});
 
             res.status(200).json(
                 ApiResponses.success(
@@ -90,12 +109,20 @@ export class AuthController {
     static async register(req: Request, res: Response): Promise<void> {
         try {
             const { cnpj, password } = req.body;
-
+            let data = {
+              type: AppLogsType.RegisterFailure,
+              info: {
+                cnpj,
+                reason: "",
+              }
+            };
             // Validação básica
             if (!cnpj || !password) {
                 res.status(400).json(
                     ApiResponses.error("CNPJ e senha são obrigatórios")
                 );
+                data.info.reason = "Missing necessary information";
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -105,6 +132,8 @@ export class AuthController {
                 res.status(400).json(
                     ApiResponses.error("CNPJ deve conter exatamente 14 dígitos")
                 );
+                data.info.reason = "Invalid CNPJ";
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -113,6 +142,8 @@ export class AuthController {
                 res.status(400).json(
                     ApiResponses.error("Senha deve ter pelo menos 6 caracteres")
                 );
+                data.info.reason = "Invalid password";
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -127,6 +158,8 @@ export class AuthController {
                 res.status(409).json(
                     ApiResponses.error("Já existe uma conta cadastrada com este CNPJ")
                 );
+                data.info.reason = "User Already Exists";
+                prisma.appLog.create({data});
                 return;
             }
 
@@ -153,7 +186,8 @@ export class AuthController {
                 cnpj,
                 userId: newUser.id,
             });
-
+            data.type = AppLogsType.RegisterSuccess;
+            prisma.appLog.create({data});
             res.status(201).json(
                 ApiResponses.success(
                     {
