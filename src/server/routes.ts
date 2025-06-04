@@ -39,6 +39,12 @@ router.put(
     MeetingMinuteController.updateMeetingMinute
 );
 
+// PUT endpoint específico para editar dados LLM
+router.put(
+    "/meeting-minutes/:id/llm-data",
+    MeetingMinuteController.updateLLMData
+);
+
 router.post(
     "/meeting-minutes/:id/authenticate",
     MeetingMinuteController.authenticateMeetingMinute
@@ -71,5 +77,12 @@ router.post(
 
 // User
 router.get("/user", UserController.getCurrentUser);
+router.put("/user", UserController.updateUser);
+
+// Admin User Management (apenas para usuários NOTARY)
+router.get("/admin/users", UserController.getAllUsers);
+router.post("/admin/users", UserController.createUser);
+router.put("/admin/users/:userId", UserController.updateUserByAdmin);
+router.delete("/admin/users/:userId", UserController.deleteUser);
 
 export default router;

@@ -26,34 +26,29 @@ model User {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    // Relacionamentos
-    meetingMinutes MeetingMinute[] @relation("CreatedByUser")
-
     @@map("users")
 }
 
 // MoM model - Minutes of Meeting (Atas)
 model MeetingMinute {
-    id             String               @id @default(cuid())
-    cnpj           String
-    status         MeetingMinutesStatus @default(PENDING)
-    summary        String
-    pdfUrl         String?
-    photoUrl       String?
-    signatureUrl   String?
-    blockchainHash String?              @unique
-    blockchainTxId String?              @unique
+    id              String               @id @default(cuid())
+    cnpj            String
+    status          MeetingMinutesStatus @default(PENDING)
+    summary         String
+    signaturesValid Boolean              @default(false)
+    inconsistencies String[]
+    pdfUrl          String?
+    photoUrl        String?
+    signatureUrl    String?
+    blockchainHash  String?              @unique
+    blockchainTxId  String?              @unique
+    notaryId        String?
 
     // Timestamps
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    // Relacionamentos
-    userId String?
-    user   User?   @relation("CreatedByUser", fields: [userId], references: [id])
-
     llmData          LLMData?
-    validationReport ValidationReport?
     comments         String[]
 
     // Índices para performance
@@ -109,22 +104,14 @@ model Participant {
     @@map("participants")
 }
 
-// Relatório de validação
-model ValidationReport {
-    id                String   @id @default(cuid())
-    signaturesValid   Boolean  @default(false)
-    participantsValid Boolean  @default(false)
-    inconsistencies   String[] // Array de inconsistências encontradas
+model AppLog {
+    id        String   @id @default(uuid()) @db.Uuid
+    type      String?  @map("type")
+    userId    String?  @map("user_id")
+    info      Json?    @map("info")
+    createdAt DateTime @default(now()) @map("created_at")
 
-    // Timestamps
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-
-    // Relacionamento com MoM (1:1)
-    momId String        @unique
-    mom   MeetingMinute @relation(fields: [momId], references: [id], onDelete: Cascade)
-
-    @@map("validation_reports")
+    @@map("app_logs")
 }
 
 // Enums
