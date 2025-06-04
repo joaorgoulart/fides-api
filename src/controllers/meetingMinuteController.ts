@@ -798,21 +798,7 @@ export class MeetingMinuteController {
 
             // Atualizar participantes se fornecidos
             if (llmData.participants && Array.isArray(llmData.participants)) {
-                // Validar estrutura dos participantes
-                const validParticipants = llmData.participants.filter((p: any) => {
-                    return p && 
-                        typeof p.name === 'string' && p.name.trim() &&
-                        typeof p.rg === 'string' && p.rg.trim() &&
-                        typeof p.cpf === 'string' && p.cpf.trim() &&
-                        typeof p.role === 'string' && p.role.trim();
-                });
-
-                if (validParticipants.length !== llmData.participants.length) {
-                    res.status(400).json(
-                        ApiResponses.error("Todos os participantes devem ter name, rg, cpf e role válidos")
-                    );
-                    return;
-                }
+        
 
                 // Deletar participantes existentes
                 await prisma.participant.deleteMany({
@@ -820,17 +806,15 @@ export class MeetingMinuteController {
                 });
 
                 // Criar novos participantes
-                if (validParticipants.length > 0) {
-                    await prisma.participant.createMany({
-                        data: validParticipants.map((p: any) => ({
-                            llmDataId: existingMom.llmData!.id,
-                            name: p.name.trim(),
-                            rg: p.rg.trim(),
-                            cpf: p.cpf.trim(),
-                            role: p.role.trim(),
-                        })),
-                    });
-                }
+                await prisma.participant.createMany({
+                    data: llmData.participants.map((p: any) => ({
+                        llmDataId: existingMom.llmData!.id,
+                        name: p.name.trim(),
+                        rg: p.rg.trim(),
+                        cpf: p.cpf.trim(),
+                        role: p.role.trim(),
+                    })),
+                });
             }
 
             // Atualizar dados do LLM se houver mudanças
