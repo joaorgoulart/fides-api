@@ -28,13 +28,14 @@ export interface BlockData{
 export class BlockchainService {
     static async submitMomData(params: UploadToBlockchainParams): Promise<Block> {
         try {
-            const blockchainUrl = "" + "/upload";
+            const blockchainUrl = process.env.BLOCKCHAIN_SERVICE + "/upload";
             const config ={
               headers: {
                 'x-api-key': "" //load from .env
               } 
             };
             const res = await axios.post(blockchainUrl, params, config);
+            console.log(res.data);
             return res.data;
         } catch (error) {
             console.error("❌ Erro ao submeter hash para blockchain:", error);
@@ -44,7 +45,7 @@ export class BlockchainService {
 
     static async verifyHash(hash: string): Promise<boolean>{
         try {
-            const blockchainUrl = "" + "/verify";
+            const blockchainUrl = process.env.BLOCKCHAIN_SERVICE + "/verify";
             const config ={
               headers: {
                 'x-api-key': "" //load from .env
