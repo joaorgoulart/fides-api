@@ -5,12 +5,27 @@ import FormData from "form-data";
 import { unlink , writeFile} from "fs/promises";
 import { promisify } from "util";
 import { execFile } from "child_process"; 
+import { Blob } from "buffer";
 import {
   GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+// Polyfill para File no Node.js se não estiver disponível
+if (typeof globalThis.File === 'undefined') {
+  globalThis.File = class extends Blob {
+    name: string;
+    lastModified: number;
+
+    constructor(fileBits: any[], fileName: string, options?: { type?: string; lastModified?: number }) {
+      super(fileBits, options);
+      this.name = fileName;
+      this.lastModified = options?.lastModified ?? Date.now();
+    }
+  } as any;
+}
 
 // Interfaces para tipos de dados
 export interface LLMAnalysisResponse {
@@ -124,9 +139,10 @@ export class LLMService {
 
             const client = new OpenAI({ apiKey });
 
+            // Usar o File constructor que agora está disponível
             const file = await client.files.create({
                 file: new File([pdf], fileName, { type: "application/pdf" }),
-                purpose: "assistants", // ou 'fine-tune', dependendo do uso
+                purpose: "assistants",
             });
 
             const response = await client.chat.completions.create({
