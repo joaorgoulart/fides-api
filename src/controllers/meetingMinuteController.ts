@@ -421,6 +421,7 @@ export class MeetingMinuteController {
                     blockchainHash: true,
                     blockchainTxId: true,
                     summary: true,
+                    cnpj: true,
                 },
             });
 
@@ -456,26 +457,14 @@ export class MeetingMinuteController {
                 return;
             }
 
-            // Gerar hash SHA-256 simulado (baseado no ID + timestamp)
-            const crypto = require("crypto");
-            const hashInput = `${existingMom.id}-${
-                existingMom.summary
-            }-${Date.now()}`;
-            const blockchainHash = crypto
-                .createHash("sha256")
-                .update(hashInput)
-                .digest("hex");
+            const hash = BlockchainService.generateDocumentHash(existingMom.summary);
 
-            // Simular transação blockchain (será substituído por integração real)
-            const blockchainTxId = `tx_${crypto
-                .randomUUID()
-                .replace(/-/g, "")
-                .substring(0, 16)}`;
-
-            Logger.info("Hash gerado para blockchain", {
-                momId: id,
-                blockchainHash: blockchainHash.substring(0, 16) + "...",
-                blockchainTxId,
+            const block = await BlockchainService.submitMomData({
+              hash,
+              momId: existingMom.id,
+              notaryId: "",
+              userId: user.userId,
+              cnpj: existingMom.cnpj,
             });
 
             // Atualizar MoM com dados do blockchain
@@ -483,8 +472,8 @@ export class MeetingMinuteController {
                 where: { id },
                 data: {
                     status: "AUTHENTICATED",
-                    blockchainHash,
-                    blockchainTxId,
+                    blockchainHash: block.data.hash,
+                    blockchainTxId: block.hash,
                 },
                 select: {
                     id: true,
@@ -492,12 +481,6 @@ export class MeetingMinuteController {
                     blockchainHash: true,
                     blockchainTxId: true,
                 },
-            });
-
-            Logger.info("Ata autenticada com sucesso", {
-                momId: id,
-                userId: user.userId,
-                blockchainTxId,
             });
 
             res.status(200).json(
