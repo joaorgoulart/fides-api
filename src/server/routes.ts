@@ -22,6 +22,10 @@ const upload = multer({ storage: storage, fileFilter: fileFilter });
 
 const router = Router();
 
+router.get("/", (req, res) => {
+    res.json({ message: "API online" });
+});
+
 // Auth
 router.post("/login", AuthController.login);
 router.post("/register", AuthController.register);
@@ -34,10 +38,7 @@ router.get(
 );
 
 // PUT endpoint para atualizar meeting minutes
-router.put(
-    "/meeting-minutes/:id",
-    MeetingMinuteController.updateMeetingMinute
-);
+router.put("/meeting-minutes/:id", MeetingMinuteController.updateMeetingMinute);
 
 // PUT endpoint específico para editar dados LLM
 router.put(
@@ -70,9 +71,9 @@ router.get(
 );
 
 router.post(
-  "/meeting-minutes/verify",
-  upload.single("pdf"),
-  MeetingMinuteController.verifyMeetingMinute,
+    "/meeting-minutes/verify",
+    upload.single("pdf"),
+    MeetingMinuteController.verifyMeetingMinute
 );
 
 // User
