@@ -74,13 +74,31 @@ export class S3Service {
 
         await s3.send(new PutObjectCommand(params));
 
+        // Retornar URL pública permanente
+        const bucketName = process.env.AWS_BUCKET_NAME || "";
+        const region = "us-east-2";
+        const publicUrl = `https://${bucketName}.s3.${region}.amazonaws.com/${fileName}`;
+
+        return publicUrl;
+    }
+
+    // Função para gerar URL assinada de longo prazo (opcional)
+    static async generateSignedUrl(fileName: string, expiresInDays: number = 365): Promise<string> {
+        const s3 = new S3Client({
+            region: "us-east-2",
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+            },
+        });
+
         const command = new GetObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME || "", // Specify the AWS S3 bucket name
-            Key: fileName, // Specify the file name
+            Bucket: process.env.AWS_BUCKET_NAME || "",
+            Key: fileName,
         });
 
         const url = await getSignedUrl(s3, command, {
-            expiresIn: 3600,
+            expiresIn: expiresInDays * 24 * 60 * 60, // Converter dias para segundos
         });
 
         return url;

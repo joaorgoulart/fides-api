@@ -48,8 +48,8 @@ model MeetingMinute {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
-    llmData          LLMData?
-    comments         String[]
+    llmData  LLMData?
+    comments String[]
 
     // Índices para performance
     @@index([cnpj])
@@ -112,6 +112,14 @@ model AppLog {
     createdAt DateTime @default(now()) @map("created_at")
 
     @@map("app_logs")
+}
+
+model Signature {
+    id        String   @id @default(cuid())
+    url       String
+    cpf       String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
 }
 
 // Enums
