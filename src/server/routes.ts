@@ -1,4 +1,5 @@
 import { MeetingMinuteController } from "../controllers/meetingMinuteController";
+import { SignatureController } from "../controllers/signatureController";
 import { AuthController } from "../controllers/authController";
 import { UserController } from "../controllers/userController";
 import { Router } from "express";
@@ -11,7 +12,9 @@ const fileFilter = (
     file: Express.Multer.File,
     cb: multer.FileFilterCallback
 ) => {
-    if (file.mimetype === "application/pdf") {
+    // Aceitar PDFs e imagens
+    if (file.mimetype === "application/pdf" || 
+        file.mimetype.startsWith("image/")) {
         cb(null, true);
     } else {
         cb(null, false);
@@ -54,7 +57,11 @@ router.post(
 // Nova rota para criação de atas (usado pelo kiosk/dispositivo externo)
 router.post(
     "/meeting-minutes",
-    upload.single("pdf"),
+    upload.fields([
+        { name: "pdf", maxCount: 1 },
+        { name: "photo", maxCount: 1 },
+        { name: "signature", maxCount: 1 }
+    ]),
     MeetingMinuteController.createMeetingMinute
 );
 
@@ -85,5 +92,8 @@ router.get("/admin/users", UserController.getAllUsers);
 router.post("/admin/users", UserController.createUser);
 router.put("/admin/users/:userId", UserController.updateUserByAdmin);
 router.delete("/admin/users/:userId", UserController.deleteUser);
+
+// Signature
+router.get("/signature", SignatureController.getSignature);
 
 export default router;

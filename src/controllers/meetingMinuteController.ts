@@ -14,10 +14,10 @@ import {
 } from "../lib/services";
 import prisma, { buildMeetingMinutesFilters } from "../lib/prisma";
 import { Request, Response } from "express";
-import { Logger } from "../lib/api-utils";
-import crypto from "crypto";
 import { BlockchainService } from "../lib/blockchain";
 import { AppLogsType } from "../enums/app-log-type";
+import { Logger } from "../lib/api-utils";
+import crypto from "crypto";
 
 export class MeetingMinuteController {
     static async getMeetingMinutes(req: Request, res: Response): Promise<void> {
@@ -173,7 +173,8 @@ export class MeetingMinuteController {
 
             // Verificar se o usuário tem acesso (CLIENT só pode ver suas próprias MoMs)
             if (
-                user?.accessLevel === "CLIENT" && user.cnpj !== null &&
+                user?.accessLevel === "CLIENT" &&
+                user.cnpj !== null &&
                 mom.cnpj !== user?.cnpj
             ) {
                 res.status(403).json(
@@ -286,16 +287,25 @@ export class MeetingMinuteController {
             // Atualizar dados do LLM se fornecidos
             if (body.llmData && existingMom.llmData) {
                 const llmUpdateData: any = {};
-                
-                if (body.llmData.summary) llmUpdateData.summary = body.llmData.summary;
-                if (body.llmData.agenda) llmUpdateData.agenda = body.llmData.agenda;
-                if (body.llmData.subjects) llmUpdateData.subjects = body.llmData.subjects;
-                if (body.llmData.deliberations) llmUpdateData.deliberations = body.llmData.deliberations;
-                if (body.llmData.signatures) llmUpdateData.signatures = body.llmData.signatures;
-                if (body.llmData.keywords) llmUpdateData.keywords = body.llmData.keywords;
+
+                if (body.llmData.summary)
+                    llmUpdateData.summary = body.llmData.summary;
+                if (body.llmData.agenda)
+                    llmUpdateData.agenda = body.llmData.agenda;
+                if (body.llmData.subjects)
+                    llmUpdateData.subjects = body.llmData.subjects;
+                if (body.llmData.deliberations)
+                    llmUpdateData.deliberations = body.llmData.deliberations;
+                if (body.llmData.signatures)
+                    llmUpdateData.signatures = body.llmData.signatures;
+                if (body.llmData.keywords)
+                    llmUpdateData.keywords = body.llmData.keywords;
 
                 // Atualizar participantes se fornecidos
-                if (body.llmData.participants && Array.isArray(body.llmData.participants)) {
+                if (
+                    body.llmData.participants &&
+                    Array.isArray(body.llmData.participants)
+                ) {
                     // Primeiro deletar participantes existentes
                     await prisma.participant.deleteMany({
                         where: { llmDataId: existingMom.llmData.id },
@@ -334,16 +344,16 @@ export class MeetingMinuteController {
                     },
                 },
             });
-            
-            const data ={
-              userId: user.userId,
-              type: AppLogsType.EditDetails,
-              info:{
-                momId: id,
-                updateData
-              }
+
+            const data = {
+                userId: user.userId,
+                type: AppLogsType.EditDetails,
+                info: {
+                    momId: id,
+                    updateData,
+                },
             };
-            prisma.appLog.create({data});
+            prisma.appLog.create({ data });
             Logger.info("Ata atualizada com sucesso", {
                 momId: id,
                 userId: user.userId,
@@ -360,29 +370,32 @@ export class MeetingMinuteController {
     }
 
     static async verifyMeetingMinute(
-      req: Request,
-      res: Response,
-    ): Promise<void>{
-      const pdfFile = req.file
-      if (!pdfFile){
-        res.status(400).json(
-          ApiResponses.error("Um arquivo deve ser providenciado")
-        );
+        req: Request,
+        res: Response
+    ): Promise<void> {
+        const pdfFile = req.file;
+        if (!pdfFile) {
+            res.status(400).json(
+                ApiResponses.error("Um arquivo deve ser providenciado")
+            );
+            return;
+        }
+
+        const validateResult = FileUtils.validatePDF(pdfFile.buffer);
+        if (!validateResult.isValid) {
+            res.status(400).json(
+                ApiResponses.error(validateResult.error ?? "")
+            );
+            return;
+        }
+
+        const hash = crypto
+            .createHash("sha256")
+            .update(pdfFile.buffer)
+            .digest("hex");
+        const blockchainRes = await BlockchainService.verifyHash(hash);
+        res.status(200).json({ result: blockchainRes });
         return;
-      }
-      
-      const validateResult = FileUtils.validatePDF(pdfFile.buffer)
-      if (!validateResult.isValid){
-        res.status(400).json(
-          ApiResponses.error(validateResult.error ?? "")
-        );
-        return;
-      }
-      
-      const hash = crypto.createHash("sha256").update(pdfFile.buffer).digest("hex"); 
-      const blockchainRes = await BlockchainService.verifyHash(hash);
-      res.status(200).json({result: blockchainRes});
-      return;        
     }
 
     static async authenticateMeetingMinute(
@@ -457,14 +470,16 @@ export class MeetingMinuteController {
                 return;
             }
 
-            const hash = BlockchainService.generateDocumentHash(existingMom.summary);
+            const hash = BlockchainService.generateDocumentHash(
+                existingMom.summary
+            );
 
             const block = await BlockchainService.submitMomData({
-              hash,
-              momId: existingMom.id,
-              notaryId: "",
-              userId: user.userId,
-              cnpj: existingMom.cnpj,
+                hash,
+                momId: existingMom.id,
+                notaryId: "",
+                userId: user.userId,
+                cnpj: existingMom.cnpj,
             });
 
             // Atualizar MoM com dados do blockchain
@@ -506,7 +521,9 @@ export class MeetingMinuteController {
         try {
             // Extrair dados do formulário
             const { cnpj } = req.body;
-            const pdfFile = req.file; // Arquivo PDF do multer
+            const files = req.files as {
+                [fieldname: string]: Express.Multer.File[];
+            };
 
             // Validações básicas
             if (!cnpj) {
@@ -514,12 +531,28 @@ export class MeetingMinuteController {
                 return;
             }
 
-            if (!pdfFile) {
+            if (!files || !files.pdf || !files.pdf[0]) {
                 res.status(400).json(
                     ApiResponses.error("Arquivo PDF é obrigatório")
                 );
                 return;
             }
+
+            if (!files.photo || !files.photo[0]) {
+                res.status(400).json(ApiResponses.error("Foto é obrigatória"));
+                return;
+            }
+
+            if (!files.signature || !files.signature[0]) {
+                res.status(400).json(
+                    ApiResponses.error("Assinatura é obrigatória")
+                );
+                return;
+            }
+
+            const pdfFile = files.pdf[0];
+            const photoFile = files.photo[0];
+            const signatureFile = files.signature[0];
 
             // Validar arquivo PDF
             const fileValidation = FileUtils.validatePDF(pdfFile.buffer);
@@ -534,30 +567,64 @@ export class MeetingMinuteController {
 
             Logger.info("Validações básicas concluídas", {
                 cnpj,
-                fileSize: pdfFile.size,
-                fileName: pdfFile.originalname,
+                pdfSize: pdfFile.size,
+                pdfName: pdfFile.originalname,
+                photoSize: photoFile.size,
+                photoName: photoFile.originalname,
+                signatureSize: signatureFile.size,
+                signatureName: signatureFile.originalname,
             });
 
-            // 1. Upload do PDF para S3
+            // 1. Upload dos arquivos para S3
             const pdfFileName = FileUtils.generateFileName(
                 pdfFile.originalname,
                 "ata_"
             );
-            const pdfUrl = await S3Service.uploadFile(
-                pdfFile.buffer,
-                pdfFileName,
-                pdfFile.mimetype
+            const photoFileName = FileUtils.generateFileName(
+                photoFile.originalname,
+                "foto_"
+            );
+            const signatureFileName = FileUtils.generateFileName(
+                signatureFile.originalname,
+                "assinatura_"
             );
 
-            Logger.info("Upload do PDF concluído", { pdfUrl });
+            // Upload paralelo dos três arquivos
+            const [pdfUrl, photoUrl, signatureUrl] = await Promise.all([
+                S3Service.uploadFile(
+                    pdfFile.buffer,
+                    pdfFileName,
+                    pdfFile.mimetype
+                ),
+                S3Service.uploadFile(
+                    photoFile.buffer,
+                    photoFileName,
+                    photoFile.mimetype
+                ),
+                S3Service.uploadFile(
+                    signatureFile.buffer,
+                    signatureFileName,
+                    signatureFile.mimetype
+                ),
+            ]);
+
+            Logger.info("Upload dos arquivos concluído", {
+                pdfUrl,
+                photoUrl,
+                signatureUrl,
+            });
 
             // 2. Validar documento (malware, etc.)
             // const docValidation = await ValidationService.validateDocument(
             //     pdfFile
             // );
             // if (!docValidation?.document?.validity) {
-            //     // Excluir arquivo se validação falhar
-            //     await S3Service.deleteFile(pdfUrl);
+            //     // Excluir arquivos se validação falhar
+            //     await Promise.all([
+            //         S3Service.deleteFile(pdfUrl),
+            //         S3Service.deleteFile(photoUrl),
+            //         S3Service.deleteFile(signatureUrl)
+            //     ]);
             //     res.status(400).json(
             //         ApiResponses.error(
             //             `Documento inválido: ${docValidation.errors.join(", ")}`
@@ -571,6 +638,8 @@ export class MeetingMinuteController {
                 data: {
                     cnpj,
                     pdfUrl,
+                    photoUrl,
+                    signatureUrl,
                     signaturesValid: false, // docValidation.document.validity,
                     status: "PENDING",
                     summary: "Processando análise do documento...", // Temporário
@@ -655,6 +724,8 @@ export class MeetingMinuteController {
                 status: finalMom!.status.toLowerCase(),
                 summary: finalMom!.summary,
                 pdfUrl: finalMom!.pdfUrl,
+                photoUrl: finalMom!.photoUrl,
+                signatureUrl: finalMom!.signatureUrl,
                 success: true,
             };
 
@@ -663,15 +734,15 @@ export class MeetingMinuteController {
                 status: finalMom!.status,
                 cnpj: finalMom!.cnpj,
             });
-            
-            const data ={
-              cnpj: finalMom!.cnpj,
-              type: AppLogsType.CreateMom,
-              info:{
-                ...finalMom
-              }
-            }; 
-            prisma.appLog.create({data});
+
+            const data = {
+                cnpj: finalMom!.cnpj,
+                type: AppLogsType.CreateMom,
+                info: {
+                    ...finalMom,
+                },
+            };
+            prisma.appLog.create({ data });
 
             res.status(201).json(
                 ApiResponses.success(
@@ -708,7 +779,10 @@ export class MeetingMinuteController {
             const { id } = req.params;
             const { llmData } = req.body;
 
-            Logger.info("Atualizando dados LLM", { momId: id, userId: user.userId });
+            Logger.info("Atualizando dados LLM", {
+                momId: id,
+                userId: user.userId,
+            });
 
             // Verificar se a MoM existe e tem dados LLM
             const existingMom = await prisma.meetingMinute.findUnique({
@@ -731,7 +805,9 @@ export class MeetingMinuteController {
 
             if (!existingMom.llmData) {
                 res.status(400).json(
-                    ApiResponses.error("Esta ata não possui dados LLM para editar")
+                    ApiResponses.error(
+                        "Esta ata não possui dados LLM para editar"
+                    )
                 );
                 return;
             }
@@ -747,42 +823,53 @@ export class MeetingMinuteController {
             // Preparar dados para atualização
             const llmUpdateData: any = {};
 
-            if (llmData.summary && typeof llmData.summary === 'string') {
+            if (llmData.summary && typeof llmData.summary === "string") {
                 llmUpdateData.summary = llmData.summary.trim();
             }
 
-            if (llmData.agenda && typeof llmData.agenda === 'string') {
+            if (llmData.agenda && typeof llmData.agenda === "string") {
                 llmUpdateData.agenda = llmData.agenda.trim();
             }
 
             if (llmData.subjects && Array.isArray(llmData.subjects)) {
-                llmUpdateData.subjects = llmData.subjects.filter(
-                    (subject: any) => typeof subject === 'string' && subject.trim()
-                ).map((subject: string) => subject.trim());
+                llmUpdateData.subjects = llmData.subjects
+                    .filter(
+                        (subject: any) =>
+                            typeof subject === "string" && subject.trim()
+                    )
+                    .map((subject: string) => subject.trim());
             }
 
             if (llmData.deliberations && Array.isArray(llmData.deliberations)) {
-                llmUpdateData.deliberations = llmData.deliberations.filter(
-                    (deliberation: any) => typeof deliberation === 'string' && deliberation.trim()
-                ).map((deliberation: string) => deliberation.trim());
+                llmUpdateData.deliberations = llmData.deliberations
+                    .filter(
+                        (deliberation: any) =>
+                            typeof deliberation === "string" &&
+                            deliberation.trim()
+                    )
+                    .map((deliberation: string) => deliberation.trim());
             }
 
             if (llmData.signatures && Array.isArray(llmData.signatures)) {
-                llmUpdateData.signatures = llmData.signatures.filter(
-                    (signature: any) => typeof signature === 'string' && signature.trim()
-                ).map((signature: string) => signature.trim());
+                llmUpdateData.signatures = llmData.signatures
+                    .filter(
+                        (signature: any) =>
+                            typeof signature === "string" && signature.trim()
+                    )
+                    .map((signature: string) => signature.trim());
             }
 
             if (llmData.keywords && Array.isArray(llmData.keywords)) {
-                llmUpdateData.keywords = llmData.keywords.filter(
-                    (keyword: any) => typeof keyword === 'string' && keyword.trim()
-                ).map((keyword: string) => keyword.trim());
+                llmUpdateData.keywords = llmData.keywords
+                    .filter(
+                        (keyword: any) =>
+                            typeof keyword === "string" && keyword.trim()
+                    )
+                    .map((keyword: string) => keyword.trim());
             }
 
             // Atualizar participantes se fornecidos
             if (llmData.participants && Array.isArray(llmData.participants)) {
-        
-
                 // Deletar participantes existentes
                 await prisma.participant.deleteMany({
                     where: { llmDataId: existingMom.llmData.id },
@@ -821,15 +908,17 @@ export class MeetingMinuteController {
             });
 
             // Transformar dados para o formato da interface
-            const transformedLLMData = updatedMom?.llmData ? {
-                summary: updatedMom.llmData.summary,
-                subjects: updatedMom.llmData.subjects,
-                agenda: updatedMom.llmData.agenda,
-                deliberations: updatedMom.llmData.deliberations,
-                participants: updatedMom.llmData.participants,
-                signatures: updatedMom.llmData.signatures,
-                keywords: updatedMom.llmData.keywords,
-            } : null;
+            const transformedLLMData = updatedMom?.llmData
+                ? {
+                      summary: updatedMom.llmData.summary,
+                      subjects: updatedMom.llmData.subjects,
+                      agenda: updatedMom.llmData.agenda,
+                      deliberations: updatedMom.llmData.deliberations,
+                      participants: updatedMom.llmData.participants,
+                      signatures: updatedMom.llmData.signatures,
+                      keywords: updatedMom.llmData.keywords,
+                  }
+                : null;
 
             // Log da operação
             const data = {
@@ -839,7 +928,7 @@ export class MeetingMinuteController {
                     momId: id,
                     updatedFields: Object.keys(llmUpdateData),
                     participantsCount: llmData.participants?.length || 0,
-                }
+                },
             };
             prisma.appLog.create({ data });
 
@@ -851,14 +940,16 @@ export class MeetingMinuteController {
             });
 
             res.status(200).json(
-                ApiResponses.success(transformedLLMData, "Dados LLM atualizados com sucesso")
+                ApiResponses.success(
+                    transformedLLMData,
+                    "Dados LLM atualizados com sucesso"
+                )
             );
         } catch (error) {
             Logger.error("Erro ao atualizar dados LLM", error);
             res.status(500).json(ApiResponses.serverError());
         }
     }
-
 
     static async addComment(req: Request, res: Response): Promise<void> {
         try {
@@ -883,7 +974,11 @@ export class MeetingMinuteController {
             const { id } = req.params;
             const { comment } = req.body;
 
-            if (!comment || typeof comment !== "string" || comment.trim() === "") {
+            if (
+                !comment ||
+                typeof comment !== "string" ||
+                comment.trim() === ""
+            ) {
                 res.status(400).json(
                     ApiResponses.error("Comentário é obrigatório")
                 );
