@@ -17,11 +17,32 @@ const fileFilter = (
         file.mimetype.startsWith("image/")) {
         cb(null, true);
     } else {
-        cb(null, false);
+        const error = new Error(`Tipo de arquivo não suportado: ${file.mimetype}`);
+        cb(error as any, false);
     }
 };
 
-const upload = multer({ storage: storage, fileFilter: fileFilter });
+const upload = multer({ 
+    storage: storage, 
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB
+        files: 3, // máximo 3 arquivos
+        fields: 10 // máximo 10 campos de texto
+    }
+});
+
+// Instância específica para meeting minutes com configuração mais permissiva
+const meetingMinuteUpload = multer({
+    storage: storage,
+    fileFilter: fileFilter,
+    limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB
+        files: 5, // mais permissivo
+        fields: 20, // mais campos permitidos
+        parts: 100 // mais partes permitidas
+    }
+});
 
 const router = Router();
 
@@ -54,14 +75,38 @@ router.post(
     MeetingMinuteController.authenticateMeetingMinute
 );
 
+// Middleware para tratar erros do multer
+const handleMulterError = (err: any, req: any, res: any, next: any) => {
+    if (err instanceof multer.MulterError) {
+        if (err.message.includes('Unexpected field')) {
+            return res.status(400).json({
+                success: false,
+                error: `Campo inesperado. Campos esperados: pdf, photo, signature. Erro: ${err.message}`
+            });
+        }
+        if (err.message.includes('File too large')) {
+            return res.status(400).json({
+                success: false,
+                error: 'Arquivo muito grande. Tamanho máximo: 50MB'
+            });
+        }
+        return res.status(400).json({
+            success: false,
+            error: `Erro no upload: ${err.message}`
+        });
+    }
+    next(err);
+};
+
 // Nova rota para criação de atas (usado pelo kiosk/dispositivo externo)
 router.post(
     "/meeting-minutes",
-    upload.fields([
+    meetingMinuteUpload.fields([
         { name: "pdf", maxCount: 1 },
         { name: "photo", maxCount: 1 },
         { name: "signature", maxCount: 1 }
     ]),
+    handleMulterError,
     MeetingMinuteController.createMeetingMinute
 );
 

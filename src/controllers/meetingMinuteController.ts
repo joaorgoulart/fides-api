@@ -519,6 +519,21 @@ export class MeetingMinuteController {
         res: Response
     ): Promise<void> {
         try {
+            // Debug: Logar informações da requisição
+            console.log("=== DEBUG createMeetingMinute ===");
+            console.log("req.body:", req.body);
+            console.log("req.files:", req.files);
+            console.log("req.file:", req.file);
+            
+            if (req.files) {
+                console.log("Files object keys:", Object.keys(req.files));
+                const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+                Object.keys(files).forEach(key => {
+                    console.log(`File field '${key}':`, files[key]?.length || 0, "files");
+                });
+            }
+            console.log("=====================================");
+
             // Extrair dados do formulário
             const { cnpj } = req.body;
             const files = req.files as {

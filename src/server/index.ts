@@ -11,7 +11,9 @@ app.use(
     }),
 );
 
-app.use(express.json());
+// Configuração para JSON com limite aumentado
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 app.use("/", routes);
 
