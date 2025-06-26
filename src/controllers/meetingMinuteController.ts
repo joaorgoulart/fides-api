@@ -94,6 +94,7 @@ export class MeetingMinuteController {
                 pdfUrl: mom.pdfUrl,
                 photoUrl: mom.photoUrl,
                 signatureUrl: mom.signatureUrl,
+                signaturesValid: mom.signaturesValid,
                 blockchainHash: mom.blockchainHash,
                 blockchainTxId: mom.blockchainTxId,
                 createdBy: mom.user,
@@ -195,6 +196,7 @@ export class MeetingMinuteController {
                 signatureUrl: mom.signatureUrl,
                 blockchainHash: mom.blockchainHash,
                 blockchainTxId: mom.blockchainTxId,
+                signaturesValid: mom.signaturesValid,
                 llmData: mom.llmData
                     ? {
                           summary: mom.llmData.summary,
@@ -630,23 +632,23 @@ export class MeetingMinuteController {
             });
 
             // 2. Validar documento (malware, etc.)
-            // const docValidation = await ValidationService.validateDocument(
-            //     pdfFile
-            // );
-            // if (!docValidation?.document?.validity) {
-            //     // Excluir arquivos se validação falhar
-            //     await Promise.all([
-            //         S3Service.deleteFile(pdfUrl),
-            //         S3Service.deleteFile(photoUrl),
-            //         S3Service.deleteFile(signatureUrl)
-            //     ]);
-            //     res.status(400).json(
-            //         ApiResponses.error(
-            //             `Documento inválido: ${docValidation.errors.join(", ")}`
-            //         )
-            //     );
-            //     return;
-            // }
+            const docValidation = await ValidationService.validateDocument(
+                pdfFile
+            );
+            if (!docValidation[0]?.document?.validity) {
+                // Excluir arquivos se validação falhar
+                await Promise.all([
+                    S3Service.deleteFile(pdfUrl),
+                    S3Service.deleteFile(photoUrl),
+                    S3Service.deleteFile(signatureUrl)
+                ]);
+                res.status(400).json(
+                    ApiResponses.error(
+                        `Documento inválido: ${JSON.stringify(docValidation)}`
+                    )
+                );
+                return;
+            }
 
             // 3. Criar registro inicial da MoM no banco
             const initialMom = await prisma.meetingMinute.create({
@@ -655,7 +657,7 @@ export class MeetingMinuteController {
                     pdfUrl,
                     photoUrl,
                     signatureUrl,
-                    signaturesValid: false, // docValidation.document.validity,
+                    signaturesValid: docValidation[0]?.document?.validity,
                     status: "PENDING",
                     summary: "Processando análise do documento...", // Temporário
                 },
@@ -696,6 +698,7 @@ export class MeetingMinuteController {
                     where: { id: initialMom.id },
                     data: {
                         summary: llmAnalysis.summary,
+                        signaturesValid: docValidation[0]?.document?.validity,
                         status: "UNDER_REVIEW", // Pronta para revisão do cartorário
                     },
                 });

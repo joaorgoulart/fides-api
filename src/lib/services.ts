@@ -296,7 +296,7 @@ export class ValidationService {
             if (error.response) {
                 // Server responded with a status code outside 2xx
                 throw new Error(
-                    `VALIDAR API error: ${error.response.status} - ${error.response.data}`
+                    `VALIDAR API error: ${error.response.status} - ${JSON.stringify(error.response.data)}`
                 );
             } else if (error.request) {
                 // No response received
