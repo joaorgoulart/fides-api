@@ -635,7 +635,7 @@ export class MeetingMinuteController {
             const docValidation = await ValidationService.validateDocument(
                 pdfFile
             );
-            if (!docValidation[0]?.document?.validity) {
+            if (!(docValidation[0]?.document?.validity || docValidation?.isValid)) {
                 // Excluir arquivos se validação falhar
                 await Promise.all([
                     S3Service.deleteFile(pdfUrl),

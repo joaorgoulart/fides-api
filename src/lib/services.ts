@@ -292,6 +292,13 @@ export class ValidationService {
             // Return the response data
             return response.data;
         } catch (error: any) {
+            const extractedSigs = await this.extractDigitalSignatures(file);
+            if(extractedSigs?.length){
+              return{
+                signatures: extractedSigs,
+                isValid: extractedSigs.every((s) => s.validity)
+              }
+            }
             // Handle errors
             if (error.response) {
                 // Server responded with a status code outside 2xx
