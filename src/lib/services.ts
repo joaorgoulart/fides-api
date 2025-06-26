@@ -338,15 +338,16 @@ export class ValidationService {
     let current: any = {};
 
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (/^Signature \d+:$/.test(trimmed)) {
+      const trimmed = line.trim().toLowerCase();
+      if (trimmed.includes("signature #")) {
         if (Object.keys(current).length > 0) sigs.push(current);
         current = {};
       } else {
         const [key, rest] = trimmed.split(':', 2);
-        if (key && rest.length) {
+        if (key && rest?.length) {
           const parsedKey = this.parsePdfSigKey(key);
-          current[parsedKey] = this.parsePdfSigValue(key, rest); 
+          const parsedSigValue = this.parsePdfSigValue(parsedKey, rest);
+          current[parsedKey] = parsedSigValue;
         }
       }
     }
@@ -384,13 +385,13 @@ export class ValidationService {
   static parsePdfSigValue(key: string, rawValue: string){
     switch(key){
       case "validity":
-        return rawValue.includes("is Valid");
+        return rawValue.toLowerCase().includes("is valid");
       case "timestamp":
         return new Date(rawValue.trim()) || rawValue.trim();
       case "ranges":
         return this.parsePdfSigKeyRanges(rawValue) ?? [];
       default:
-        rawValue
+        return rawValue.trim();
     }
   }
 
