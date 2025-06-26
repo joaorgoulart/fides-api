@@ -13,23 +13,27 @@ const fileFilter = (
     cb: multer.FileFilterCallback
 ) => {
     // Aceitar PDFs e imagens
-    if (file.mimetype === "application/pdf" || 
-        file.mimetype.startsWith("image/")) {
+    if (
+        file.mimetype === "application/pdf" ||
+        file.mimetype.startsWith("image/")
+    ) {
         cb(null, true);
     } else {
-        const error = new Error(`Tipo de arquivo não suportado: ${file.mimetype}`);
+        const error = new Error(
+            `Tipo de arquivo não suportado: ${file.mimetype}`
+        );
         cb(error as any, false);
     }
 };
 
-const upload = multer({ 
-    storage: storage, 
+const upload = multer({
+    storage: storage,
     fileFilter: fileFilter,
     limits: {
         fileSize: 50 * 1024 * 1024, // 50MB
         files: 3, // máximo 3 arquivos
-        fields: 10 // máximo 10 campos de texto
-    }
+        fields: 10, // máximo 10 campos de texto
+    },
 });
 
 // Instância específica para meeting minutes com configuração mais permissiva
@@ -40,8 +44,8 @@ const meetingMinuteUpload = multer({
         fileSize: 50 * 1024 * 1024, // 50MB
         files: 5, // mais permissivo
         fields: 20, // mais campos permitidos
-        parts: 100 // mais partes permitidas
-    }
+        parts: 100, // mais partes permitidas
+    },
 });
 
 const router = Router();
@@ -78,21 +82,21 @@ router.post(
 // Middleware para tratar erros do multer
 const handleMulterError = (err: any, req: any, res: any, next: any) => {
     if (err instanceof multer.MulterError) {
-        if (err.message.includes('Unexpected field')) {
+        if (err.message.includes("Unexpected field")) {
             return res.status(400).json({
                 success: false,
-                error: `Campo inesperado. Campos esperados: pdf, photo, signature. Erro: ${err.message}`
+                error: `Campo inesperado. Campos esperados: pdf, photo, signature. Erro: ${err.message}`,
             });
         }
-        if (err.message.includes('File too large')) {
+        if (err.message.includes("File too large")) {
             return res.status(400).json({
                 success: false,
-                error: 'Arquivo muito grande. Tamanho máximo: 50MB'
+                error: "Arquivo muito grande. Tamanho máximo: 50MB",
             });
         }
         return res.status(400).json({
             success: false,
-            error: `Erro no upload: ${err.message}`
+            error: `Erro no upload: ${err.message}`,
         });
     }
     next(err);
@@ -104,7 +108,7 @@ router.post(
     meetingMinuteUpload.fields([
         { name: "pdf", maxCount: 1 },
         { name: "photo", maxCount: 1 },
-        { name: "signature", maxCount: 1 }
+        { name: "signature", maxCount: 1 },
     ]),
     handleMulterError,
     MeetingMinuteController.createMeetingMinute
@@ -140,5 +144,10 @@ router.delete("/admin/users/:userId", UserController.deleteUser);
 
 // Signature
 router.get("/signature", SignatureController.getSignature);
+router.post(
+    "/signature",
+    upload.single("signature"),
+    SignatureController.createSignature
+);
 
 export default router;
