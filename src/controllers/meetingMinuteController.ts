@@ -635,20 +635,6 @@ export class MeetingMinuteController {
             const docValidation = await ValidationService.validateDocument(
                 pdfFile
             );
-            if (!docValidation[0]?.document?.validity) {
-                // Excluir arquivos se validação falhar
-                await Promise.all([
-                    S3Service.deleteFile(pdfUrl),
-                    S3Service.deleteFile(photoUrl),
-                    S3Service.deleteFile(signatureUrl)
-                ]);
-                res.status(400).json(
-                    ApiResponses.error(
-                        `Documento inválido: ${JSON.stringify(docValidation)}`
-                    )
-                );
-                return;
-            }
 
             // 3. Criar registro inicial da MoM no banco
             const initialMom = await prisma.meetingMinute.create({
@@ -657,7 +643,7 @@ export class MeetingMinuteController {
                     pdfUrl,
                     photoUrl,
                     signatureUrl,
-                    signaturesValid: docValidation[0]?.document?.validity,
+                    signaturesValid: docValidation[0]?.document?.validity ? true : false,
                     status: "PENDING",
                     summary: "Processando análise do documento...", // Temporário
                 },
