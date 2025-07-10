@@ -405,17 +405,18 @@ export class MeetingMinuteController {
       res: Response
     ): Promise<void>{
       const hash = req.query.hash;
-      
       if(!hash){
         res.status(400).json(
           ApiResponses.error("Um hash deve ser providenciado")
         );
         return;
       }
-
-      const blockchainRes = await BlockchainService.verifyHash(hash as string);
-      res.status(200).json({result: blockchainRes});
-      return;
+      try{
+        const blockchainRes = await BlockchainService.verifyHash(hash as string);
+        res.status(200).json({result: blockchainRes});
+      } catch(e){
+        res.status(400).json({error: "Bad string"});
+      }
     }
 
     static async authenticateMeetingMinute(
