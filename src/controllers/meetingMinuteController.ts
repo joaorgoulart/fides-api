@@ -400,6 +400,24 @@ export class MeetingMinuteController {
         return;
     }
 
+    static async verifyMoMHash(
+      req: Request,
+      res: Response
+    ): Promise<void>{
+      const hash = req.query.hash;
+      
+      if(!hash){
+        res.status(400).json(
+          ApiResponses.error("Um hash deve ser providenciado")
+        );
+        return;
+      }
+
+      const blockchainRes = await BlockchainService.verifyHash(hash as string);
+      res.status(200).json({result: blockchainRes});
+      return;
+    }
+
     static async authenticateMeetingMinute(
         req: Request,
         res: Response

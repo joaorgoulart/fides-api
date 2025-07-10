@@ -132,6 +132,11 @@ router.post(
     MeetingMinuteController.verifyMeetingMinute
 );
 
+router.get(
+  "/meeting-minutes/verify-hash",
+  MeetingMinuteController.verifyMoMHash
+)
+
 // User
 router.get("/user", UserController.getCurrentUser);
 router.put("/user", UserController.updateUser);
