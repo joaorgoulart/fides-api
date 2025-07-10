@@ -60,6 +60,12 @@ router.post("/register", AuthController.register);
 
 // Meeting Minutes
 router.get("/meeting-minutes", MeetingMinuteController.getMeetingMinutes);
+
+router.get(
+  "/meeting-minutes/verify-hash",
+  MeetingMinuteController.verifyMoMHash,
+);
+
 router.get(
     "/meeting-minutes/:id",
     MeetingMinuteController.getMeetingMinuteById
@@ -131,6 +137,7 @@ router.post(
     upload.single("pdf"),
     MeetingMinuteController.verifyMeetingMinute
 );
+
 
 // User
 router.get("/user", UserController.getCurrentUser);
